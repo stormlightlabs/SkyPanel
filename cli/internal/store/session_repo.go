@@ -156,6 +156,22 @@ func (r *SessionRepository) HasValidSession(ctx context.Context) bool {
 	return r.config.Session != nil && r.config.Session.EncryptedAccess != ""
 }
 
+// GetDid returns the DID for the current session
+func (r *SessionRepository) GetDid(ctx context.Context) (string, error) {
+	if r.config.Session == nil {
+		return "", errors.New("no active session")
+	}
+	return r.config.Session.Did, nil
+}
+
+// GetHandle returns the handle for the current session
+func (r *SessionRepository) GetHandle(ctx context.Context) (string, error) {
+	if r.config.Session == nil {
+		return "", errors.New("no active session")
+	}
+	return r.config.Session.Handle, nil
+}
+
 // splitToken splits a combined token string (accessToken|refreshToken)
 func splitToken(token string) []string {
 	result := []string{}

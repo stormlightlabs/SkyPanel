@@ -115,3 +115,117 @@ func convertPosts(posts []*store.PostModel) []ExportPost {
 	}
 	return exportPosts
 }
+
+// ProfileToJSON exports an ActorProfile to JSON format
+func ProfileToJSON(filename string, profile *store.ActorProfile) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+
+	if err := encoder.Encode(profile); err != nil {
+		return fmt.Errorf("failed to encode JSON: %w", err)
+	}
+
+	return nil
+}
+
+// ProfileToTXT exports an ActorProfile to plain text format
+func ProfileToTXT(filename string, profile *store.ActorProfile) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer file.Close()
+
+	fmt.Fprintf(file, "Profile: @%s\n", profile.Handle)
+	fmt.Fprintf(file, "%s\n\n", strings.Repeat("=", 80))
+
+	if profile.DisplayName != "" {
+		fmt.Fprintf(file, "Display Name: %s\n", profile.DisplayName)
+	}
+	fmt.Fprintf(file, "DID: %s\n", profile.Did)
+	fmt.Fprintf(file, "Handle: @%s\n", profile.Handle)
+
+	if profile.Description != "" {
+		fmt.Fprintf(file, "\nDescription:\n%s\n", profile.Description)
+	}
+
+	fmt.Fprintf(file, "\nStats:\n")
+	fmt.Fprintf(file, "  Followers: %d\n", profile.FollowersCount)
+	fmt.Fprintf(file, "  Following: %d\n", profile.FollowsCount)
+	fmt.Fprintf(file, "  Posts: %d\n", profile.PostsCount)
+
+	if profile.CreatedAt != "" {
+		fmt.Fprintf(file, "\nCreated: %s\n", profile.CreatedAt)
+	}
+
+	return nil
+}
+
+// FeedViewPostToJSON exports a single FeedViewPost to JSON format
+func FeedViewPostToJSON(filename string, post *store.FeedViewPost) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+
+	if err := encoder.Encode(post); err != nil {
+		return fmt.Errorf("failed to encode JSON: %w", err)
+	}
+
+	return nil
+}
+
+// FeedViewPostToTXT exports a single FeedViewPost to plain text format
+func FeedViewPostToTXT(filename string, post *store.FeedViewPost) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer file.Close()
+
+	if post.Post != nil {
+		p := post.Post
+		fmt.Fprintf(file, "Post by @%s\n", p.Author.Handle)
+		fmt.Fprintf(file, "%s\n\n", strings.Repeat("=", 80))
+
+		fmt.Fprintf(file, "URI: %s\n", p.Uri)
+		fmt.Fprintf(file, "CID: %s\n", p.Cid)
+
+		if p.Author.DisplayName != "" {
+			fmt.Fprintf(file, "Author: %s (@%s)\n", p.Author.DisplayName, p.Author.Handle)
+		} else {
+			fmt.Fprintf(file, "Author: @%s\n", p.Author.Handle)
+		}
+
+		// Extract text from record
+		if recordMap, ok := p.Record.(map[string]any); ok {
+			if text, ok := recordMap["text"].(string); ok {
+				fmt.Fprintf(file, "\nText:\n%s\n", text)
+			}
+		}
+
+		fmt.Fprintf(file, "\nEngagement:\n")
+		fmt.Fprintf(file, "  Likes: %d\n", p.LikeCount)
+		fmt.Fprintf(file, "  Reposts: %d\n", p.RepostCount)
+		fmt.Fprintf(file, "  Replies: %d\n", p.ReplyCount)
+		fmt.Fprintf(file, "  Quotes: %d\n", p.QuoteCount)
+
+		fmt.Fprintf(file, "\nIndexed: %s\n", p.IndexedAt)
+
+		if post.Reason != nil && post.Reason.By != nil {
+			fmt.Fprintf(file, "\nReposted by: @%s\n", post.Reason.By.Handle)
+		}
+	}
+
+	return nil
+}
