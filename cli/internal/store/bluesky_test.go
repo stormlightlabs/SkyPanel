@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// TestNewBlueskyService verifies service initialization with default and custom URLs.
 func TestNewBlueskyService(t *testing.T) {
 	t.Run("default URL", func(t *testing.T) {
 		svc := NewBlueskyService("")
@@ -31,7 +30,6 @@ func TestNewBlueskyService(t *testing.T) {
 	})
 }
 
-// TestBlueskyService_Name verifies the service identifier.
 func TestBlueskyService_Name(t *testing.T) {
 	svc := NewBlueskyService("")
 	if svc.Name() != "Bluesky" {
@@ -39,7 +37,6 @@ func TestBlueskyService_Name(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_Authenticate verifies successful authentication flow.
 func TestBlueskyService_Authenticate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/xrpc/com.atproto.server.createSession" {
@@ -93,7 +90,6 @@ func TestBlueskyService_Authenticate(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_Authenticate_InvalidCredentials verifies error handling for invalid credentials.
 func TestBlueskyService_Authenticate_InvalidCredentials(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -131,7 +127,6 @@ func TestBlueskyService_Authenticate_InvalidCredentials(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_Authenticate_ServerError verifies error handling for server errors.
 func TestBlueskyService_Authenticate_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -154,7 +149,6 @@ func TestBlueskyService_Authenticate_ServerError(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_Request verifies generic request handling.
 func TestBlueskyService_Request(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
@@ -181,7 +175,6 @@ func TestBlueskyService_Request(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_Request_Unauthenticated verifies error when not authenticated.
 func TestBlueskyService_Request_Unauthenticated(t *testing.T) {
 	svc := NewBlueskyService("")
 	_, err := svc.Request(context.Background(), "GET", "/test", nil, nil)
@@ -193,7 +186,6 @@ func TestBlueskyService_Request_Unauthenticated(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_Request_TokenRefresh verifies automatic token refresh on 401.
 func TestBlueskyService_Request_TokenRefresh(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -238,7 +230,6 @@ func TestBlueskyService_Request_TokenRefresh(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_HealthCheck verifies connectivity checks.
 func TestBlueskyService_HealthCheck(t *testing.T) {
 	t.Run("healthy", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -269,7 +260,6 @@ func TestBlueskyService_HealthCheck(t *testing.T) {
 	})
 }
 
-// TestBlueskyService_GetTimeline verifies timeline fetching.
 func TestBlueskyService_GetTimeline(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "app.bsky.feed.getTimeline") {
@@ -315,7 +305,6 @@ func TestBlueskyService_GetTimeline(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_GetAuthorFeed verifies author feed fetching.
 func TestBlueskyService_GetAuthorFeed(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "app.bsky.feed.getAuthorFeed") {
@@ -353,7 +342,6 @@ func TestBlueskyService_GetAuthorFeed(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_GetFollows verifies follows fetching.
 func TestBlueskyService_GetFollows(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "app.bsky.graph.getFollows") {
@@ -395,7 +383,6 @@ func TestBlueskyService_GetFollows(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_Close verifies cleanup.
 func TestBlueskyService_Close(t *testing.T) {
 	svc := NewBlueskyService("")
 	svc.SetTokens("test-token", "refresh-token")
@@ -412,7 +399,6 @@ func TestBlueskyService_Close(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_SetTokens verifies token setting.
 func TestBlueskyService_SetTokens(t *testing.T) {
 	svc := NewBlueskyService("")
 	svc.SetTokens("access-token", "refresh-token")
@@ -428,7 +414,6 @@ func TestBlueskyService_SetTokens(t *testing.T) {
 	}
 }
 
-// TestParseJWTExpiry verifies JWT expiry parsing.
 func TestParseJWTExpiry(t *testing.T) {
 	t.Run("valid JWT", func(t *testing.T) {
 		token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MzAwMDAwMDB9.dummysignature"
@@ -459,7 +444,6 @@ func TestParseJWTExpiry(t *testing.T) {
 	})
 }
 
-// TestBlueskyService_ShouldRefreshToken verifies token refresh logic.
 func TestBlueskyService_ShouldRefreshToken(t *testing.T) {
 	t.Run("no expiry set", func(t *testing.T) {
 		svc := NewBlueskyService("")
@@ -493,7 +477,6 @@ func TestBlueskyService_ShouldRefreshToken(t *testing.T) {
 	})
 }
 
-// TestBlueskyService_RefreshAccessToken verifies token refresh flow.
 func TestBlueskyService_RefreshAccessToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/xrpc/com.atproto.server.refreshSession" {
@@ -531,7 +514,6 @@ func TestBlueskyService_RefreshAccessToken(t *testing.T) {
 	}
 }
 
-// TestBlueskyService_APIErrors verifies error handling for various API failures.
 func TestBlueskyService_APIErrors(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -580,5 +562,141 @@ func TestBlueskyService_APIErrors(t *testing.T) {
 				t.Error("expected error, got nil")
 			}
 		})
+	}
+}
+
+func TestBlueskyService_GetProfile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/xrpc/app.bsky.actor.getProfile" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != "GET" {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+
+		actor := r.URL.Query().Get("actor")
+		if actor == "" {
+			t.Error("actor parameter is required")
+		}
+
+		auth := r.Header.Get("Authorization")
+		if !strings.Contains(auth, "Bearer") {
+			t.Error("expected Bearer token in Authorization header")
+		}
+
+		response := ActorProfile{
+			Did:            "did:plc:test123",
+			Handle:         actor,
+			DisplayName:    "Test User",
+			Description:    "Test profile description",
+			FollowersCount: 100,
+			FollowsCount:   50,
+			PostsCount:     25,
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	profile, err := svc.GetProfile(context.Background(), "alice.bsky.social")
+	if err != nil {
+		t.Fatalf("GetProfile failed: %v", err)
+	}
+
+	if profile.Did != "did:plc:test123" {
+		t.Errorf("expected Did 'did:plc:test123', got %s", profile.Did)
+	}
+	if profile.Handle != "alice.bsky.social" {
+		t.Errorf("expected Handle 'alice.bsky.social', got %s", profile.Handle)
+	}
+	if profile.DisplayName != "Test User" {
+		t.Errorf("expected DisplayName 'Test User', got %s", profile.DisplayName)
+	}
+	if profile.FollowersCount != 100 {
+		t.Errorf("expected FollowersCount 100, got %d", profile.FollowersCount)
+	}
+	if profile.FollowsCount != 50 {
+		t.Errorf("expected FollowsCount 50, got %d", profile.FollowsCount)
+	}
+	if profile.PostsCount != 25 {
+		t.Errorf("expected PostsCount 25, got %d", profile.PostsCount)
+	}
+}
+
+func TestBlueskyService_GetProfile_WithDid(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		actor := r.URL.Query().Get("actor")
+		if !strings.HasPrefix(actor, "did:plc:") {
+			t.Errorf("expected DID, got %s", actor)
+		}
+
+		response := ActorProfile{
+			Did:         actor,
+			Handle:      "user.bsky.social",
+			DisplayName: "DID User",
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	profile, err := svc.GetProfile(context.Background(), "did:plc:abc123xyz")
+	if err != nil {
+		t.Fatalf("GetProfile with DID failed: %v", err)
+	}
+
+	if profile.Did != "did:plc:abc123xyz" {
+		t.Errorf("expected Did 'did:plc:abc123xyz', got %s", profile.Did)
+	}
+}
+
+func TestBlueskyService_GetProfile_NotAuthenticated(t *testing.T) {
+	svc := NewBlueskyService("")
+
+	_, err := svc.GetProfile(context.Background(), "alice.bsky.social")
+	if err == nil {
+		t.Error("expected error when not authenticated")
+	}
+	if !strings.Contains(err.Error(), "not authenticated") {
+		t.Errorf("expected authentication error, got: %v", err)
+	}
+}
+
+func TestBlueskyService_GetProfile_NotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"ProfileNotFound","message":"Profile not found"}`))
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	_, err := svc.GetProfile(context.Background(), "nonexistent.bsky.social")
+	if err == nil {
+		t.Error("expected error for nonexistent profile")
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("expected 404 error, got: %v", err)
+	}
+}
+
+func TestBlueskyService_GetProfile_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"InternalError","message":"Server error"}`))
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	_, err := svc.GetProfile(context.Background(), "alice.bsky.social")
+	if err == nil {
+		t.Error("expected error for server error")
 	}
 }

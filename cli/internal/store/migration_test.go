@@ -23,8 +23,8 @@ func TestRunMigrations(t *testing.T) {
 		t.Fatalf("schema_migrations table not found: %v", err)
 	}
 
-	if count != 2 {
-		t.Errorf("expected 2 migrations applied, got %d", count)
+	if count != 3 {
+		t.Errorf("expected 3 migrations applied, got %d", count)
 	}
 
 	err = db.QueryRow("SELECT COUNT(*) FROM feeds").Scan(&count)
@@ -35,6 +35,11 @@ func TestRunMigrations(t *testing.T) {
 	err = db.QueryRow("SELECT COUNT(*) FROM posts").Scan(&count)
 	if err != nil {
 		t.Errorf("posts table not created: %v", err)
+	}
+
+	err = db.QueryRow("SELECT COUNT(*) FROM profiles").Scan(&count)
+	if err != nil {
+		t.Errorf("profiles table not created: %v", err)
 	}
 }
 
@@ -58,8 +63,8 @@ func TestRunMigrations_Idempotent(t *testing.T) {
 		t.Fatalf("failed to query migrations: %v", err)
 	}
 
-	if count != 2 {
-		t.Errorf("expected 2 migrations, got %d", count)
+	if count != 3 {
+		t.Errorf("expected 3 migrations, got %d", count)
 	}
 }
 
@@ -148,7 +153,7 @@ func TestMigrationOrdering(t *testing.T) {
 	}
 	defer rows.Close()
 
-	expectedVersions := []int{1, 2}
+	expectedVersions := []int{1, 2, 3}
 	var actualVersions []int
 
 	for rows.Next() {
@@ -207,8 +212,8 @@ func TestLoadMigrations(t *testing.T) {
 		t.Fatalf("failed to load up migrations: %v", err)
 	}
 
-	if len(upMigrations) != 2 {
-		t.Errorf("expected 2 up migrations, got %d", len(upMigrations))
+	if len(upMigrations) != 3 {
+		t.Errorf("expected 3 up migrations, got %d", len(upMigrations))
 	}
 
 	for i := 1; i < len(upMigrations); i++ {
@@ -222,8 +227,8 @@ func TestLoadMigrations(t *testing.T) {
 		t.Fatalf("failed to load down migrations: %v", err)
 	}
 
-	if len(downMigrations) != 2 {
-		t.Errorf("expected 2 down migrations, got %d", len(downMigrations))
+	if len(downMigrations) != 3 {
+		t.Errorf("expected 3 down migrations, got %d", len(downMigrations))
 	}
 }
 

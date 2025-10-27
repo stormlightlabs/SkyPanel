@@ -18,7 +18,7 @@ const (
 	defaultTimeout    = 30 * time.Second
 )
 
-// BlueskyService implements the Service interface for AT Protocol / Bluesky API
+// BlueskyService implements the [Service] interface for AT Protocol / Bluesky API
 type BlueskyService struct {
 	baseURL       string
 	client        *http.Client
@@ -274,6 +274,30 @@ func (s *BlueskyService) GetFollows(ctx context.Context, actor string, limit int
 	}
 
 	return &follows, nil
+}
+
+// GetProfile fetches detailed profile information for an actor.
+// Actor can be a DID or handle (e.g., "did:plc:..." or "alice.bsky.social").
+func (s *BlueskyService) GetProfile(ctx context.Context, actor string) (*ActorProfile, error) {
+	url := fmt.Sprintf("/xrpc/app.bsky.actor.getProfile?actor=%s", actor)
+
+	resp, err := s.Request(ctx, "GET", url, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyText, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("getProfile failed: %s - %s", resp.Status, string(bodyText))
+	}
+
+	var profile ActorProfile
+	if err := json.NewDecoder(resp.Body).Decode(&profile); err != nil {
+		return nil, err
+	}
+
+	return &profile, nil
 }
 
 // SetTokens allows external code to set tokens (e.g., from SessionRepository)

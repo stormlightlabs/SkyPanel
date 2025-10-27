@@ -29,7 +29,7 @@ func main() {
 		Version: "0.1.0",
 		Commands: []*cli.Command{
 			SetupCommand(), LoginCommand(), StatusCommand(),
-			ListCommand(), ViewCommand(), ExportCommand(),
+			FetchCommand(), ListCommand(), ViewCommand(), ExportCommand(),
 		},
 	}
 

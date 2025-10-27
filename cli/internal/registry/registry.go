@@ -19,6 +19,7 @@ type Registry struct {
 	sessionRepo *store.SessionRepository
 	feedRepo    *store.FeedRepository
 	postRepo    *store.PostRepository
+	profileRepo *store.ProfileRepository
 	initialized bool
 	mu          sync.RWMutex
 }
@@ -70,6 +71,15 @@ func (r *Registry) Init(ctx context.Context) error {
 	}
 	r.postRepo = postRepo
 
+	profileRepo, err := store.NewProfileRepository()
+	if err != nil {
+		return &RegistryError{Op: "InitProfileRepo", Err: err}
+	}
+	if err := profileRepo.Init(ctx); err != nil {
+		return &RegistryError{Op: "InitProfileRepo", Err: err}
+	}
+	r.profileRepo = profileRepo
+
 	r.service = store.NewBlueskyService("")
 
 	if sessionRepo.HasValidSession(ctx) {
@@ -111,6 +121,12 @@ func (r *Registry) Close() error {
 
 	if r.postRepo != nil {
 		if err := r.postRepo.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if r.profileRepo != nil {
+		if err := r.profileRepo.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -186,6 +202,22 @@ func (r *Registry) GetPostRepo() (*store.PostRepository, error) {
 	}
 
 	return r.postRepo, nil
+}
+
+// GetProfileRepo returns the ProfileRepository singleton
+func (r *Registry) GetProfileRepo() (*store.ProfileRepository, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if !r.initialized {
+		return nil, &RegistryError{Op: "GetProfileRepo", Err: errors.New("registry not initialized")}
+	}
+
+	if r.profileRepo == nil {
+		return nil, &RegistryError{Op: "GetProfileRepo", Err: errors.New("profile repository not available")}
+	}
+
+	return r.profileRepo, nil
 }
 
 // IsInitialized returns whether the registry has been initialized
