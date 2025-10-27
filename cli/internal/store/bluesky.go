@@ -18,6 +18,10 @@ const (
 	defaultTimeout    = 30 * time.Second
 )
 
+type jwtClaims struct {
+	Exp int64 `json:"exp"`
+}
+
 // BlueskyService implements the [Service] interface for AT Protocol / Bluesky API
 type BlueskyService struct {
 	baseURL       string
@@ -26,6 +30,8 @@ type BlueskyService struct {
 	refreshToken  string
 	tokenExpiry   time.Time
 	authenticated bool
+	did           string
+	handle        string
 }
 
 // NewBlueskyService creates a new Bluesky service client
@@ -113,6 +119,8 @@ func (s *BlueskyService) Authenticate(ctx context.Context, credentials any) erro
 
 	s.accessToken = session.AccessJwt
 	s.refreshToken = session.RefreshJwt
+	s.did = session.Did
+	s.handle = session.Handle
 	s.authenticated = true
 
 	if expiry, err := parseJWTExpiry(s.accessToken); err == nil {
@@ -195,6 +203,9 @@ func (s *BlueskyService) Close() error {
 	s.authenticated = false
 	s.accessToken = ""
 	s.refreshToken = ""
+	s.did = ""
+	s.handle = ""
+	s.tokenExpiry = time.Time{}
 	return nil
 }
 
@@ -300,6 +311,93 @@ func (s *BlueskyService) GetProfile(ctx context.Context, actor string) (*ActorPr
 	return &profile, nil
 }
 
+// SearchActors searches for actors (users) matching the query string.
+// Returns actor profiles with pagination support.
+func (s *BlueskyService) SearchActors(ctx context.Context, query string, limit int, cursor string) (*SearchActorsResponse, error) {
+	urlPath := fmt.Sprintf("/xrpc/app.bsky.actor.searchActors?q=%s&limit=%d", strings.ReplaceAll(query, " ", "+"), limit)
+	if cursor != "" {
+		urlPath += "&cursor=" + cursor
+	}
+
+	resp, err := s.Request(ctx, "GET", urlPath, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyText, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("searchActors failed: %s - %s", resp.Status, string(bodyText))
+	}
+
+	var result SearchActorsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+// SearchPosts searches for posts matching the query string returning feed view posts with pagination support.
+func (s *BlueskyService) SearchPosts(ctx context.Context, query string, limit int, cursor string) (*SearchPostsResponse, error) {
+	urlPath := fmt.Sprintf("/xrpc/app.bsky.feed.searchPosts?q=%s&limit=%d", strings.ReplaceAll(query, " ", "+"), limit)
+	if cursor != "" {
+		urlPath += "&cursor=" + cursor
+	}
+
+	resp, err := s.Request(ctx, "GET", urlPath, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyText, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("searchPosts failed: %s - %s", resp.Status, string(bodyText))
+	}
+
+	var result SearchPostsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+// GetPosts fetches specific posts by their AT URIs.
+// Accepts a slice of URIs and returns the corresponding posts.
+func (s *BlueskyService) GetPosts(ctx context.Context, uris []string) (*GetPostsResponse, error) {
+	if len(uris) == 0 {
+		return &GetPostsResponse{Posts: []FeedViewPost{}}, nil
+	}
+
+	url := "/xrpc/app.bsky.feed.getPosts?"
+	for i, uri := range uris {
+		if i > 0 {
+			url += "&"
+		}
+		url += "uris=" + uri
+	}
+
+	resp, err := s.Request(ctx, "GET", url, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyText, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("getPosts failed: %s - %s", resp.Status, string(bodyText))
+	}
+
+	var result GetPostsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
 // SetTokens allows external code to set tokens (e.g., from SessionRepository)
 func (s *BlueskyService) SetTokens(accessToken, refreshToken string) {
 	s.accessToken = accessToken
@@ -321,6 +419,16 @@ func (s *BlueskyService) GetRefreshToken() string {
 	return s.refreshToken
 }
 
+// GetDid returns the authenticated user's DID
+func (s *BlueskyService) GetDid() string {
+	return s.did
+}
+
+// GetHandle returns the authenticated user's handle
+func (s *BlueskyService) GetHandle() string {
+	return s.handle
+}
+
 // shouldRefreshToken checks if token is 90% through its lifetime
 func (s *BlueskyService) shouldRefreshToken() bool {
 	if s.tokenExpiry.IsZero() {
@@ -329,15 +437,14 @@ func (s *BlueskyService) shouldRefreshToken() bool {
 
 	now := time.Now()
 	lifetime := s.tokenExpiry.Sub(now)
-	threshold := lifetime / 10 // 10% remaining
+	threshold := lifetime / 10
 
 	return now.Add(threshold).After(s.tokenExpiry)
 }
 
 // refreshAccessToken uses the refresh token to get a new access token
 func (s *BlueskyService) refreshAccessToken(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, "POST",
-		s.baseURL+"/xrpc/com.atproto.server.refreshSession", nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", s.baseURL+"/xrpc/com.atproto.server.refreshSession", nil)
 	if err != nil {
 		return err
 	}
@@ -377,16 +484,12 @@ func parseJWTExpiry(token string) (time.Time, error) {
 		return time.Time{}, errors.New("invalid JWT format")
 	}
 
-	// Decode payload (second part)
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	var claims struct {
-		Exp int64 `json:"exp"`
-	}
-
+	var claims jwtClaims
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return time.Time{}, err
 	}

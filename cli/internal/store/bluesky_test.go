@@ -700,3 +700,337 @@ func TestBlueskyService_GetProfile_ServerError(t *testing.T) {
 		t.Error("expected error for server error")
 	}
 }
+
+func TestBlueskyService_SearchActors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "app.bsky.actor.searchActors") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+
+		query := r.URL.Query().Get("q")
+		if query != "test user" {
+			t.Errorf("expected q='test user', got %s", query)
+		}
+
+		limit := r.URL.Query().Get("limit")
+		if limit != "25" {
+			t.Errorf("expected limit=25, got %s", limit)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		response := SearchActorsResponse{
+			Cursor: "next-cursor",
+			Actors: []ActorProfile{
+				{
+					Did:         "did:plc:search1",
+					Handle:      "testuser.bsky.social",
+					DisplayName: "Test User",
+				},
+				{
+					Did:         "did:plc:search2",
+					Handle:      "testuser2.bsky.social",
+					DisplayName: "Test User 2",
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	result, err := svc.SearchActors(context.Background(), "test user", 25, "")
+	if err != nil {
+		t.Fatalf("SearchActors failed: %v", err)
+	}
+
+	if result.Cursor != "next-cursor" {
+		t.Errorf("expected cursor 'next-cursor', got %s", result.Cursor)
+	}
+	if len(result.Actors) != 2 {
+		t.Errorf("expected 2 actors, got %d", len(result.Actors))
+	}
+	if result.Actors[0].Handle != "testuser.bsky.social" {
+		t.Errorf("expected first actor handle 'testuser.bsky.social', got %s", result.Actors[0].Handle)
+	}
+}
+
+func TestBlueskyService_SearchActors_WithCursor(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cursor := r.URL.Query().Get("cursor")
+		if cursor != "test-cursor" {
+			t.Errorf("expected cursor='test-cursor', got %s", cursor)
+		}
+
+		response := SearchActorsResponse{
+			Actors: []ActorProfile{
+				{Did: "did:plc:page2", Handle: "user3.bsky.social"},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	result, err := svc.SearchActors(context.Background(), "test", 25, "test-cursor")
+	if err != nil {
+		t.Fatalf("SearchActors with cursor failed: %v", err)
+	}
+
+	if len(result.Actors) != 1 {
+		t.Errorf("expected 1 actor, got %d", len(result.Actors))
+	}
+}
+
+func TestBlueskyService_SearchActors_NotAuthenticated(t *testing.T) {
+	svc := NewBlueskyService("")
+
+	_, err := svc.SearchActors(context.Background(), "test", 25, "")
+	if err == nil {
+		t.Error("expected error when not authenticated")
+	}
+	if !strings.Contains(err.Error(), "not authenticated") {
+		t.Errorf("expected authentication error, got: %v", err)
+	}
+}
+
+func TestBlueskyService_SearchActors_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"InternalError"}`))
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	_, err := svc.SearchActors(context.Background(), "test", 25, "")
+	if err == nil {
+		t.Error("expected error for server error")
+	}
+}
+
+func TestBlueskyService_SearchPosts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "app.bsky.feed.searchPosts") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+
+		query := r.URL.Query().Get("q")
+		if query != "test post" {
+			t.Errorf("expected q='test post', got %s", query)
+		}
+
+		limit := r.URL.Query().Get("limit")
+		if limit != "30" {
+			t.Errorf("expected limit=30, got %s", limit)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		response := SearchPostsResponse{
+			Cursor: "next-cursor",
+			Posts: []FeedViewPost{
+				{
+					Post: &PostView{
+						Uri: "at://test/post1",
+						Author: &ActorProfile{
+							Did:    "did:plc:author1",
+							Handle: "author1.bsky.social",
+						},
+						Record: map[string]any{
+							"text": "This is a test post",
+						},
+					},
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	result, err := svc.SearchPosts(context.Background(), "test post", 30, "")
+	if err != nil {
+		t.Fatalf("SearchPosts failed: %v", err)
+	}
+
+	if result.Cursor != "next-cursor" {
+		t.Errorf("expected cursor 'next-cursor', got %s", result.Cursor)
+	}
+	if len(result.Posts) != 1 {
+		t.Errorf("expected 1 post, got %d", len(result.Posts))
+	}
+	if result.Posts[0].Post.Uri != "at://test/post1" {
+		t.Errorf("expected post URI 'at://test/post1', got %s", result.Posts[0].Post.Uri)
+	}
+}
+
+func TestBlueskyService_SearchPosts_WithCursor(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cursor := r.URL.Query().Get("cursor")
+		if cursor != "page2-cursor" {
+			t.Errorf("expected cursor='page2-cursor', got %s", cursor)
+		}
+
+		response := SearchPostsResponse{
+			Posts: []FeedViewPost{
+				{Post: &PostView{Uri: "at://test/post2"}},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	result, err := svc.SearchPosts(context.Background(), "test", 30, "page2-cursor")
+	if err != nil {
+		t.Fatalf("SearchPosts with cursor failed: %v", err)
+	}
+
+	if len(result.Posts) != 1 {
+		t.Errorf("expected 1 post, got %d", len(result.Posts))
+	}
+}
+
+func TestBlueskyService_SearchPosts_NotAuthenticated(t *testing.T) {
+	svc := NewBlueskyService("")
+
+	_, err := svc.SearchPosts(context.Background(), "test", 30, "")
+	if err == nil {
+		t.Error("expected error when not authenticated")
+	}
+	if !strings.Contains(err.Error(), "not authenticated") {
+		t.Errorf("expected authentication error, got: %v", err)
+	}
+}
+
+func TestBlueskyService_GetPosts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "app.bsky.feed.getPosts") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+
+		uris := r.URL.Query()["uris"]
+		if len(uris) != 2 {
+			t.Errorf("expected 2 URIs, got %d", len(uris))
+		}
+		if uris[0] != "at://test/post1" {
+			t.Errorf("expected first URI 'at://test/post1', got %s", uris[0])
+		}
+		if uris[1] != "at://test/post2" {
+			t.Errorf("expected second URI 'at://test/post2', got %s", uris[1])
+		}
+
+		response := GetPostsResponse{
+			Posts: []FeedViewPost{
+				{Post: &PostView{Uri: "at://test/post1"}},
+				{Post: &PostView{Uri: "at://test/post2"}},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	result, err := svc.GetPosts(context.Background(), []string{"at://test/post1", "at://test/post2"})
+	if err != nil {
+		t.Fatalf("GetPosts failed: %v", err)
+	}
+
+	if len(result.Posts) != 2 {
+		t.Errorf("expected 2 posts, got %d", len(result.Posts))
+	}
+	if result.Posts[0].Post.Uri != "at://test/post1" {
+		t.Errorf("expected first post URI 'at://test/post1', got %s", result.Posts[0].Post.Uri)
+	}
+}
+
+func TestBlueskyService_GetPosts_EmptyURIs(t *testing.T) {
+	svc := NewBlueskyService("")
+	svc.SetTokens("test-token", "refresh-token")
+
+	result, err := svc.GetPosts(context.Background(), []string{})
+	if err != nil {
+		t.Fatalf("GetPosts with empty URIs failed: %v", err)
+	}
+
+	if len(result.Posts) != 0 {
+		t.Errorf("expected 0 posts, got %d", len(result.Posts))
+	}
+}
+
+func TestBlueskyService_GetPosts_SingleURI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		uris := r.URL.Query()["uris"]
+		if len(uris) != 1 {
+			t.Errorf("expected 1 URI, got %d", len(uris))
+		}
+
+		response := GetPostsResponse{
+			Posts: []FeedViewPost{
+				{
+					Post: &PostView{
+						Uri: "at://test/single",
+						Author: &ActorProfile{
+							Handle: "author.bsky.social",
+						},
+					},
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	result, err := svc.GetPosts(context.Background(), []string{"at://test/single"})
+	if err != nil {
+		t.Fatalf("GetPosts with single URI failed: %v", err)
+	}
+
+	if len(result.Posts) != 1 {
+		t.Errorf("expected 1 post, got %d", len(result.Posts))
+	}
+}
+
+func TestBlueskyService_GetPosts_NotAuthenticated(t *testing.T) {
+	svc := NewBlueskyService("")
+
+	_, err := svc.GetPosts(context.Background(), []string{"at://test/post1"})
+	if err == nil {
+		t.Error("expected error when not authenticated")
+	}
+	if !strings.Contains(err.Error(), "not authenticated") {
+		t.Errorf("expected authentication error, got: %v", err)
+	}
+}
+
+func TestBlueskyService_GetPosts_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"InternalError"}`))
+	}))
+	defer server.Close()
+
+	svc := NewBlueskyService(server.URL)
+	svc.SetTokens("test-token", "refresh-token")
+
+	_, err := svc.GetPosts(context.Background(), []string{"at://test/post1"})
+	if err == nil {
+		t.Error("expected error for server error")
+	}
+	if !strings.Contains(err.Error(), "500") {
+		t.Errorf("expected 500 error, got: %v", err)
+	}
+}

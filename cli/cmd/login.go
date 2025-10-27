@@ -7,6 +7,7 @@ import (
 	"github.com/stormlightlabs/skypanel/cli/internal/imports"
 	"github.com/stormlightlabs/skypanel/cli/internal/registry"
 	"github.com/stormlightlabs/skypanel/cli/internal/setup"
+	"github.com/stormlightlabs/skypanel/cli/internal/store"
 	"github.com/stormlightlabs/skypanel/cli/internal/ui"
 	"github.com/urfave/cli/v3"
 )
@@ -106,10 +107,38 @@ func LoginAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to get session repository: %w", err)
 	}
 
-	if err := sessionRepo.UpdateTokens(ctx, service.GetAccessToken(), service.GetRefreshToken()); err != nil {
-		logger.Warn("Failed to save session tokens", "error", err)
+	session, err := createSessionFromService(service, handle)
+	if err != nil {
+		return fmt.Errorf("failed to create session: %w", err)
 	}
 
+	if err := sessionRepo.Save(ctx, session); err != nil {
+		logger.Error("Failed to save session", "error", err)
+		return fmt.Errorf("authentication succeeded but failed to save session: %w", err)
+	}
+
+	logger.Debug("Session saved successfully", "did", session.ID(), "handle", handle)
 	ui.Successln("Successfully authenticated as %s", handle)
 	return nil
+}
+
+// createSessionFromService creates a SessionModel from an authenticated service
+func createSessionFromService(service *store.BlueskyService, handle string) (*store.SessionModel, error) {
+	did := service.GetDid()
+	if did == "" {
+		return nil, fmt.Errorf("no DID available from authenticated service")
+	}
+
+	accessToken := service.GetAccessToken()
+	refreshToken := service.GetRefreshToken()
+
+	session := &store.SessionModel{
+		Handle:     handle,
+		Token:      accessToken + "|" + refreshToken,
+		ServiceURL: service.BaseURL(),
+		IsValid:    true,
+	}
+	session.SetID(did)
+
+	return session, nil
 }

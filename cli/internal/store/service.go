@@ -24,7 +24,7 @@ type Service interface {
 	// Authenticate establishes credentials with the service (token, key, etc.).
 	Authenticate(ctx context.Context, credentials any) error
 	// Request performs a generic API request and returns the raw response.
-	// Implementations may wrap or replace http.Client as needed.
+	// Implementations may wrap or replace [http.Client] as needed.
 	Request(ctx context.Context, method, path string, body io.Reader, headers map[string]string) (*http.Response, error)
 	// HealthCheck verifies connectivity and minimal readiness of the remote API.
 	HealthCheck(ctx context.Context) error
@@ -66,7 +66,6 @@ type VerificationMethod struct {
 }
 
 // DidService represents a service endpoint in the DID document (e.g., PDS endpoint).
-// Renamed from Service to avoid collision with the Service interface.
 type DidService struct {
 	ID              string `json:"id"`
 	Type            string `json:"type"`
@@ -238,4 +237,21 @@ type ActorStatus struct {
 	Embed     any    `json:"embed,omitempty"`
 	ExpiresAt string `json:"expiresAt,omitempty"`
 	IsActive  bool   `json:"isActive"`
+}
+
+// SearchActorsResponse models response from app.bsky.actor.searchActors matching the search query with pagination support.
+type SearchActorsResponse struct {
+	Cursor string         `json:"cursor,omitempty"`
+	Actors []ActorProfile `json:"actors"`
+}
+
+// SearchPostsResponse models response from app.bsky.feed.searchPosts matching the search query with pagination support.
+type SearchPostsResponse struct {
+	Cursor string         `json:"cursor,omitempty"`
+	Posts  []FeedViewPost `json:"posts"`
+}
+
+// GetPostsResponse models response from app.bsky.feed.getPosts.
+type GetPostsResponse struct {
+	Posts []FeedViewPost `json:"posts"`
 }

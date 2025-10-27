@@ -1,33 +1,5 @@
 # ROADMAP - "SkyCLI"
 
-- Basic commands: `login`, `list`:`list feeds`, `view`: `feed <feedURI>`, `export`: `feed <localFeedID>`.
-
-## Agent Backend integration
-
-- Command Groups: `fetch`, `search`, `view`
-- Commands:
-    - `fetch`
-        1. `timeline` - default
-        2. `feed <feedURI|localFeedID>`
-        3. `author <actor>`
-    - `view`
-        1. `view post <postID|postURL>`
-        2. `feed <feedURI|localFeedID>`
-        3. `profile <actor>`
-    - `search`
-        1. `search feeds <query>`
-        2. `search posts <query>`
-        3. `search users <query>`
-    - `list` (refetches with flag `-r`)
-        - `posts`: fetches user's own posts and shows them - default
-        - `feeds`: fetches user's own feeds and shows them
-    - `export` (keep existing command signature)
-        - `feed <localFeedID>`
-        - `profile <actor>`
-        - `post <postID|postURL>`
-
-- Done?: CLI can fetch and display the posts for timeline or author.
-
 ## TUI view with bubbletea
 
 - Implement interactive feed-browser (pager) in terminal (scrolling list of posts, expand post details).

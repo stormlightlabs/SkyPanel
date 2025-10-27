@@ -147,20 +147,11 @@ func ExportPostAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("post URI or URL required")
 	}
 
-	postURI := cmd.Args().First()
+	postIdentifier := cmd.Args().First()
 	format := strings.ToLower(cmd.String("format"))
 
 	if format != "json" && format != "txt" {
 		return fmt.Errorf("invalid format for post: %s (must be json or txt)", format)
-	}
-
-	// TODO: Convert URL to URI if needed
-	if strings.HasPrefix(postURI, "https://bsky.app/profile/") {
-		// Extract URI from bsky.app URL
-		// Example: https://bsky.app/profile/user.bsky.social/post/abc123
-		// -> at://did:plc:.../app.bsky.feed.post/abc123
-		ui.Warningln("URL to URI conversion not yet implemented, please provide AT URI directly")
-		return fmt.Errorf("URL conversion not implemented, use AT URI format (at://...)")
 	}
 
 	service, err := reg.GetService()
@@ -172,12 +163,40 @@ func ExportPostAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("not authenticated: run 'skycli login' first")
 	}
 
+	postURI, err := parsePostURI(postIdentifier)
+	if err != nil {
+		return fmt.Errorf("failed to parse post identifier: %w", err)
+	}
+
 	logger.Debug("Fetching post for export", "uri", postURI)
 
-	// TODO: Implement GetPost in BlueskyService
-	// For now, we'll fetch the author feed and find the post
-	ui.Warningln("Direct post fetch not yet implemented")
-	return fmt.Errorf("direct post export not yet implemented - use feed export")
+	response, err := service.GetPosts(ctx, []string{postURI})
+	if err != nil {
+		return fmt.Errorf("failed to fetch post: %w", err)
+	}
+
+	if len(response.Posts) == 0 {
+		return fmt.Errorf("post not found: %s", postURI)
+	}
+
+	post := &response.Posts[0]
+
+	filename := fmt.Sprintf("post_%s_%s.%s", extractRkey(postURI), time.Now().Format("2006-01-02"), format)
+
+	switch format {
+	case "json":
+		err = export.FeedViewPostToJSON(filename, post)
+	case "txt":
+		err = export.FeedViewPostToTXT(filename, post)
+	}
+
+	if err != nil {
+		logger.Error("Failed to export", "error", err)
+		return err
+	}
+
+	ui.Successln("Exported post to %s", filename)
+	return nil
 }
 
 // ExportCommand returns the export command with subcommands for feed, profile, and post
@@ -256,4 +275,33 @@ func ExportCommand() *cli.Command {
 			},
 		},
 	}
+}
+
+// parsePostURI converts a bsky.app URL or AT URI to an AT URI
+func parsePostURI(identifier string) (string, error) {
+	if strings.HasPrefix(identifier, "at://") {
+		return identifier, nil
+	}
+
+	if strings.HasPrefix(identifier, "https://bsky.app/profile/") ||
+		strings.HasPrefix(identifier, "http://bsky.app/profile/") {
+		parts := strings.Split(identifier, "/")
+		if len(parts) < 7 || parts[5] != "post" {
+			return "", fmt.Errorf("invalid bsky.app URL format")
+		}
+		handle := parts[4]
+		rkey := parts[6]
+		return fmt.Sprintf("at://%s/app.bsky.feed.post/%s", handle, rkey), nil
+	}
+
+	return "", fmt.Errorf("identifier must be an AT URI (at://...) or bsky.app URL")
+}
+
+// extractRkey extracts the record key from an AT URI
+func extractRkey(uri string) string {
+	parts := strings.Split(uri, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return "unknown"
 }
