@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -44,4 +45,23 @@ func NewTestDB(t *testing.T) (*sql.DB, func()) {
 	}
 
 	return db, cleanup
+}
+
+// setupTestConfig creates a test config directory and returns cleanup function
+func SetupTestConfig(t *testing.T) (string, func()) {
+	tmpDir := t.TempDir()
+	originalHome := os.Getenv("HOME")
+
+	os.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".skycli")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create test config dir: %v", err)
+	}
+
+	cleanup := func() {
+		os.Setenv("HOME", originalHome)
+	}
+
+	return configDir, cleanup
 }

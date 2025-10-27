@@ -39,7 +39,6 @@ func createTestPosts() []*store.PostModel {
 		},
 	}
 
-	// Set IDs and timestamps
 	for i, post := range posts {
 		post.SetID(string(rune('a' + i)))
 		post.SetCreatedAt(now.Add(time.Duration(-i) * time.Hour))
@@ -61,12 +60,10 @@ func TestToJSON_Success(t *testing.T) {
 		t.Fatalf("ToJSON failed: %v", err)
 	}
 
-	// Verify file exists
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		t.Fatal("exported file does not exist")
 	}
 
-	// Read and parse JSON
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Fatalf("failed to read exported file: %v", err)
@@ -81,7 +78,6 @@ func TestToJSON_Success(t *testing.T) {
 		t.Errorf("expected 3 posts, got %d", len(exportedPosts))
 	}
 
-	// Verify first post content
 	if exportedPosts[0].URI != "at://did:plc:test1/app.bsky.feed.post/1" {
 		t.Errorf("unexpected URI: %s", exportedPosts[0].URI)
 	}
@@ -137,12 +133,10 @@ func TestToCSV_Success(t *testing.T) {
 		t.Fatalf("ToCSV failed: %v", err)
 	}
 
-	// Verify file exists
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		t.Fatal("exported file does not exist")
 	}
 
-	// Read and parse CSV
 	file, err := os.Open(filename)
 	if err != nil {
 		t.Fatalf("failed to open exported file: %v", err)
@@ -155,12 +149,10 @@ func TestToCSV_Success(t *testing.T) {
 		t.Fatalf("failed to parse CSV: %v", err)
 	}
 
-	// Verify header + 3 data rows
 	if len(records) != 4 {
 		t.Errorf("expected 4 rows (header + 3 data), got %d", len(records))
 	}
 
-	// Verify header
 	expectedHeader := []string{"ID", "URI", "AuthorDID", "Text", "FeedID", "IndexedAt", "CreatedAt"}
 	for i, col := range expectedHeader {
 		if records[0][i] != col {
@@ -168,7 +160,6 @@ func TestToCSV_Success(t *testing.T) {
 		}
 	}
 
-	// Verify first data row
 	if records[1][1] != "at://did:plc:test1/app.bsky.feed.post/1" {
 		t.Errorf("unexpected URI in row 1: %s", records[1][1])
 	}
@@ -201,7 +192,6 @@ func TestToCSV_SpecialCharacters(t *testing.T) {
 		t.Fatalf("failed to parse CSV: %v", err)
 	}
 
-	// Third post has special characters
 	specialText := records[3][3]
 	if !strings.Contains(specialText, "quotes") {
 		t.Error("special characters not properly preserved in CSV")
@@ -233,7 +223,6 @@ func TestToCSV_EmptyPosts(t *testing.T) {
 		t.Fatalf("failed to parse CSV: %v", err)
 	}
 
-	// Should only have header row
 	if len(records) != 1 {
 		t.Errorf("expected 1 row (header only), got %d", len(records))
 	}
@@ -261,12 +250,10 @@ func TestToTXT_Success(t *testing.T) {
 		t.Fatalf("ToTXT failed: %v", err)
 	}
 
-	// Verify file exists
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		t.Fatal("exported file does not exist")
 	}
 
-	// Read file content
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		t.Fatalf("failed to read exported file: %v", err)
@@ -274,7 +261,6 @@ func TestToTXT_Success(t *testing.T) {
 
 	content := string(data)
 
-	// Verify content contains expected elements
 	if !strings.Contains(content, "Post #1") {
 		t.Error("missing post number")
 	}
@@ -341,7 +327,6 @@ func TestToTXT_MultiplePostsFormatting(t *testing.T) {
 
 	content := string(data)
 
-	// Verify all posts are present
 	for i := 1; i <= 3; i++ {
 		postNum := "Post #" + string(rune('0'+i))
 		if !strings.Contains(content, postNum) {
@@ -349,7 +334,6 @@ func TestToTXT_MultiplePostsFormatting(t *testing.T) {
 		}
 	}
 
-	// Count separators (should have 3)
 	separatorCount := strings.Count(content, strings.Repeat("-", 80))
 	if separatorCount != 3 {
 		t.Errorf("expected 3 separators, got %d", separatorCount)
@@ -405,7 +389,6 @@ func TestExportPost_JSONTags(t *testing.T) {
 
 	content := string(data)
 
-	// Verify JSON uses snake_case
 	expectedFields := []string{
 		"\"id\":",
 		"\"uri\":",
@@ -460,5 +443,369 @@ func TestToJSON_SinglePost(t *testing.T) {
 
 	if exportedPosts[0].Text != "Single post" {
 		t.Errorf("unexpected text: %s", exportedPosts[0].Text)
+	}
+}
+
+// createTestProfile generates a sample profile for testing
+func createTestProfile() *store.ActorProfile {
+	return &store.ActorProfile{
+		Did:            "did:plc:test123",
+		Handle:         "testuser.bsky.social",
+		DisplayName:    "Test User",
+		Description:    "This is a test profile description",
+		FollowersCount: 100,
+		FollowsCount:   50,
+		PostsCount:     25,
+		CreatedAt:      "2024-01-01T00:00:00Z",
+	}
+}
+
+// TestProfileToJSON_Success verifies profile JSON export with valid data
+func TestProfileToJSON_Success(t *testing.T) {
+	profile := createTestProfile()
+
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "profile.json")
+
+	err := ProfileToJSON(filename, profile)
+	if err != nil {
+		t.Fatalf("ProfileToJSON failed: %v", err)
+	}
+
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		t.Fatal("exported file does not exist")
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("failed to read exported file: %v", err)
+	}
+
+	var exportedProfile store.ActorProfile
+	if err := json.Unmarshal(data, &exportedProfile); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if exportedProfile.Did != profile.Did {
+		t.Errorf("expected DID %s, got %s", profile.Did, exportedProfile.Did)
+	}
+	if exportedProfile.Handle != profile.Handle {
+		t.Errorf("expected handle %s, got %s", profile.Handle, exportedProfile.Handle)
+	}
+	if exportedProfile.DisplayName != profile.DisplayName {
+		t.Errorf("expected display name %s, got %s", profile.DisplayName, exportedProfile.DisplayName)
+	}
+	if exportedProfile.FollowersCount != profile.FollowersCount {
+		t.Errorf("expected followers %d, got %d", profile.FollowersCount, exportedProfile.FollowersCount)
+	}
+}
+
+// TestProfileToJSON_InvalidPath verifies error handling for invalid file paths
+func TestProfileToJSON_InvalidPath(t *testing.T) {
+	profile := createTestProfile()
+
+	err := ProfileToJSON("/invalid/path/that/does/not/exist/profile.json", profile)
+	if err == nil {
+		t.Error("expected error for invalid path, got nil")
+	}
+}
+
+// TestProfileToTXT_Success verifies profile TXT export with valid data
+func TestProfileToTXT_Success(t *testing.T) {
+	profile := createTestProfile()
+
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "profile.txt")
+
+	err := ProfileToTXT(filename, profile)
+	if err != nil {
+		t.Fatalf("ProfileToTXT failed: %v", err)
+	}
+
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		t.Fatal("exported file does not exist")
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("failed to read exported file: %v", err)
+	}
+
+	content := string(data)
+
+	if !strings.Contains(content, "@"+profile.Handle) {
+		t.Error("missing handle")
+	}
+	if !strings.Contains(content, profile.DisplayName) {
+		t.Error("missing display name")
+	}
+	if !strings.Contains(content, profile.Did) {
+		t.Error("missing DID")
+	}
+	if !strings.Contains(content, profile.Description) {
+		t.Error("missing description")
+	}
+	if !strings.Contains(content, "Followers: 100") {
+		t.Error("missing followers count")
+	}
+	if !strings.Contains(content, "Following: 50") {
+		t.Error("missing following count")
+	}
+	if !strings.Contains(content, "Posts: 25") {
+		t.Error("missing posts count")
+	}
+	if !strings.Contains(content, strings.Repeat("=", 80)) {
+		t.Error("missing separator")
+	}
+}
+
+// TestProfileToTXT_MinimalProfile verifies TXT export with minimal profile data
+func TestProfileToTXT_MinimalProfile(t *testing.T) {
+	profile := &store.ActorProfile{
+		Did:    "did:plc:minimal",
+		Handle: "minimal.bsky.social",
+	}
+
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "minimal.txt")
+
+	err := ProfileToTXT(filename, profile)
+	if err != nil {
+		t.Fatalf("ProfileToTXT failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("failed to read exported file: %v", err)
+	}
+
+	content := string(data)
+
+	if !strings.Contains(content, "did:plc:minimal") {
+		t.Error("missing DID")
+	}
+	if !strings.Contains(content, "@minimal.bsky.social") {
+		t.Error("missing handle")
+	}
+
+	if strings.Contains(content, "Display Name:") && profile.DisplayName == "" {
+		t.Error("should not show empty display name label")
+	}
+}
+
+// TestProfileToTXT_InvalidPath verifies error handling for invalid file paths
+func TestProfileToTXT_InvalidPath(t *testing.T) {
+	profile := createTestProfile()
+
+	err := ProfileToTXT("/invalid/path/that/does/not/exist/profile.txt", profile)
+	if err == nil {
+		t.Error("expected error for invalid path, got nil")
+	}
+}
+
+// createTestFeedViewPost generates a sample FeedViewPost for testing
+func createTestFeedViewPost() *store.FeedViewPost {
+	return &store.FeedViewPost{
+		Post: &store.PostView{
+			Uri: "at://did:plc:test123/app.bsky.feed.post/abc123",
+			Cid: "bafyreic3test",
+			Author: &store.ActorProfile{
+				Did:         "did:plc:author123",
+				Handle:      "testauthor.bsky.social",
+				DisplayName: "Test Author",
+			},
+			Record: map[string]any{
+				"text":      "This is a test post with some content",
+				"createdAt": "2024-01-01T12:00:00Z",
+			},
+			LikeCount:   42,
+			RepostCount: 10,
+			ReplyCount:  5,
+			QuoteCount:  2,
+			IndexedAt:   "2024-01-01T12:00:00Z",
+		},
+	}
+}
+
+// TestFeedViewPostToJSON_Success verifies FeedViewPost JSON export with valid data
+func TestFeedViewPostToJSON_Success(t *testing.T) {
+	post := createTestFeedViewPost()
+
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "post.json")
+
+	err := FeedViewPostToJSON(filename, post)
+	if err != nil {
+		t.Fatalf("FeedViewPostToJSON failed: %v", err)
+	}
+
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		t.Fatal("exported file does not exist")
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("failed to read exported file: %v", err)
+	}
+
+	var exportedPost store.FeedViewPost
+	if err := json.Unmarshal(data, &exportedPost); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if exportedPost.Post.Uri != post.Post.Uri {
+		t.Errorf("expected URI %s, got %s", post.Post.Uri, exportedPost.Post.Uri)
+	}
+	if exportedPost.Post.Author.Handle != post.Post.Author.Handle {
+		t.Errorf("expected handle %s, got %s", post.Post.Author.Handle, exportedPost.Post.Author.Handle)
+	}
+	if exportedPost.Post.LikeCount != post.Post.LikeCount {
+		t.Errorf("expected like count %d, got %d", post.Post.LikeCount, exportedPost.Post.LikeCount)
+	}
+}
+
+// TestFeedViewPostToJSON_InvalidPath verifies error handling for invalid file paths
+func TestFeedViewPostToJSON_InvalidPath(t *testing.T) {
+	post := createTestFeedViewPost()
+
+	err := FeedViewPostToJSON("/invalid/path/that/does/not/exist/post.json", post)
+	if err == nil {
+		t.Error("expected error for invalid path, got nil")
+	}
+}
+
+// TestFeedViewPostToTXT_Success verifies FeedViewPost TXT export with valid data
+func TestFeedViewPostToTXT_Success(t *testing.T) {
+	post := createTestFeedViewPost()
+
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "post.txt")
+
+	err := FeedViewPostToTXT(filename, post)
+	if err != nil {
+		t.Fatalf("FeedViewPostToTXT failed: %v", err)
+	}
+
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		t.Fatal("exported file does not exist")
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("failed to read exported file: %v", err)
+	}
+
+	content := string(data)
+
+	if !strings.Contains(content, "@"+post.Post.Author.Handle) {
+		t.Error("missing author handle")
+	}
+	if !strings.Contains(content, post.Post.Author.DisplayName) {
+		t.Error("missing author display name")
+	}
+	if !strings.Contains(content, post.Post.Uri) {
+		t.Error("missing post URI")
+	}
+	if !strings.Contains(content, post.Post.Cid) {
+		t.Error("missing post CID")
+	}
+	if !strings.Contains(content, "This is a test post") {
+		t.Error("missing post text")
+	}
+	if !strings.Contains(content, "Likes: 42") {
+		t.Error("missing like count")
+	}
+	if !strings.Contains(content, "Reposts: 10") {
+		t.Error("missing repost count")
+	}
+	if !strings.Contains(content, "Replies: 5") {
+		t.Error("missing reply count")
+	}
+	if !strings.Contains(content, "Quotes: 2") {
+		t.Error("missing quote count")
+	}
+	if !strings.Contains(content, strings.Repeat("=", 80)) {
+		t.Error("missing separator")
+	}
+}
+
+// TestFeedViewPostToTXT_WithRepost verifies TXT export with repost reason
+func TestFeedViewPostToTXT_WithRepost(t *testing.T) {
+	post := createTestFeedViewPost()
+	post.Reason = &store.ReasonView{
+		Type: "app.bsky.feed.defs#reasonRepost",
+		By: &store.ActorProfile{
+			Did:         "did:plc:reposter",
+			Handle:      "reposter.bsky.social",
+			DisplayName: "Reposter",
+		},
+		IndexedAt: "2024-01-01T12:00:00Z",
+	}
+
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "repost.txt")
+
+	err := FeedViewPostToTXT(filename, post)
+	if err != nil {
+		t.Fatalf("FeedViewPostToTXT failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("failed to read exported file: %v", err)
+	}
+
+	content := string(data)
+
+	if !strings.Contains(content, "Reposted by: @reposter.bsky.social") {
+		t.Error("missing repost information")
+	}
+}
+
+// TestFeedViewPostToTXT_MinimalPost verifies TXT export with minimal post data
+func TestFeedViewPostToTXT_MinimalPost(t *testing.T) {
+	post := &store.FeedViewPost{
+		Post: &store.PostView{
+			Uri: "at://did:plc:minimal/app.bsky.feed.post/xyz",
+			Cid: "bafyreicminimal",
+			Author: &store.ActorProfile{
+				Did:    "did:plc:minimal",
+				Handle: "minimal.bsky.social",
+			},
+			Record:    map[string]any{},
+			IndexedAt: "2024-01-01T00:00:00Z",
+		},
+	}
+
+	tmpDir := t.TempDir()
+	filename := filepath.Join(tmpDir, "minimal.txt")
+
+	err := FeedViewPostToTXT(filename, post)
+	if err != nil {
+		t.Fatalf("FeedViewPostToTXT failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("failed to read exported file: %v", err)
+	}
+
+	content := string(data)
+
+	if !strings.Contains(content, "@minimal.bsky.social") {
+		t.Error("missing handle")
+	}
+	if !strings.Contains(content, "at://did:plc:minimal") {
+		t.Error("missing URI")
+	}
+}
+
+// TestFeedViewPostToTXT_InvalidPath verifies error handling for invalid file paths
+func TestFeedViewPostToTXT_InvalidPath(t *testing.T) {
+	post := createTestFeedViewPost()
+
+	err := FeedViewPostToTXT("/invalid/path/that/does/not/exist/post.txt", post)
+	if err == nil {
+		t.Error("expected error for invalid path, got nil")
 	}
 }

@@ -198,8 +198,8 @@ func TestProfileModel_DataJSONStorage(t *testing.T) {
 	}`
 
 	profile := &ProfileModel{
-		Did:      "did:plc:abc123",
-		Handle:   "bob.bsky.social",
+		// Did:      "did:plc:abc123",
+		// Handle:   "bob.bsky.social",
 		DataJSON: jsonData,
 	}
 
