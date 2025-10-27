@@ -1,0 +1,18 @@
+{
+    "name": "@skypanel/workspace",
+    "private": true,
+    "version": "0.0.0",
+    "packageManager": "pnpm@9.0.0",
+    "scripts": {
+        "dev:extension": "pnpm --filter @skypanel/extension dev",
+        "dev:site": "pnpm --filter @skypanel/docs start",
+        "build": "pnpm --recursive --workspace-concurrency=1 run build",
+        "build:extension": "pnpm --filter @skypanel/extension build",
+        "build:site": "pnpm --filter @skypanel/docs build",
+        "check": "pnpm --filter @skypanel/extension check",
+        "typecheck": "pnpm --filter @skypanel/docs typecheck"
+    },
+    "engines": {
+        "node": ">=20.0.0"
+    }
+}
