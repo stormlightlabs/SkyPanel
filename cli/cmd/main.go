@@ -57,7 +57,7 @@ func main() {
 	}
 
 	if err := app.Run(ctx, os.Args); err != nil {
-		logger.Fatal("Command failed", "error", err)
+		logger.Fatalf("Command failed with error: %v", err)
 	}
 }
 
