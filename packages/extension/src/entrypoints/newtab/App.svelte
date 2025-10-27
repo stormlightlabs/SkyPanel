@@ -1,7 +1,6 @@
 <script lang="ts">
-  import svelteLogo from "../../assets/svelte.svg";
-  import Counter from "../../lib/Counter.svelte";
-  import "../../styles/base.css";
+  import svelteLogo from "$assets/svelte.svg";
+  import "$styles/base.css";
 </script>
 
 <main>
@@ -14,10 +13,6 @@
     </a>
   </div>
   <h1>WXT + Svelte</h1>
-
-  <div class="card">
-    <Counter />
-  </div>
-
+  <div class="card"></div>
   <p class="read-the-docs">Click on the WXT and Svelte logos to learn more</p>
 </main>

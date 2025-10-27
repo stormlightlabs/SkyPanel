@@ -1,6 +1,13 @@
 {
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
-    "useDefineForClassFields": true
+    "useDefineForClassFields": true,
+    "baseUrl": ".",
+    "paths": {
+      "$assets/*": ["src/assets/*"],
+      "$entrypoints/*": ["src/entrypoints/*"],
+      "$lib/*": ["src/lib/*"],
+      "$styles/*": ["src/styles/*"]
+    }
   }
 }
