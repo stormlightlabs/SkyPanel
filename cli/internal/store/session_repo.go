@@ -84,7 +84,6 @@ func (r *SessionRepository) Save(ctx context.Context, model Model) error {
 		return errors.New("invalid model type: expected *SessionModel")
 	}
 
-	// Parse combined token format (accessToken|refreshToken)
 	var accessToken, refreshToken string
 	parts := splitToken(session.Token)
 	if len(parts) == 2 {
