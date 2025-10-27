@@ -9,8 +9,7 @@ import (
 const appName = "skycli"
 
 // GetConfigDir returns the platform-specific configuration directory path.
-// On Unix-like systems: ~/.skycli
-// On Windows: %APPDATA%/skycli
+// On Unix-like systems: ~/.skycli or Windows: %APPDATA%/skycli
 func GetConfigDir() (string, error) {
 	var baseDir string
 
@@ -77,3 +76,5 @@ type PathError struct {
 func (e *PathError) Error() string {
 	return e.Op + ": " + e.Err
 }
+
+var _ error = &PathError{}

@@ -11,9 +11,8 @@ import (
 	"os"
 )
 
-// EncryptToken encrypts a plaintext token using AES-256-GCM with a key derived from SHA256.
+// EncryptToken encrypts a plaintext token using AES-256-GCM with a key derived from SHA256 as a [base64]-encoded ciphertext with prepended nonce.
 // The encryption key is derived from either SKYCLI_SECRET env var or machine-specific identifier.
-// Returns base64-encoded ciphertext with prepended nonce.
 func EncryptToken(plaintext string) (string, error) {
 	if plaintext == "" {
 		return "", nil
@@ -43,7 +42,7 @@ func EncryptToken(plaintext string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-// DecryptToken decrypts a base64-encoded token encrypted with EncryptToken.
+// DecryptToken decrypts a base64-encoded token encrypted with [EncryptToken].
 // Returns the original plaintext token or an error if decryption fails.
 func DecryptToken(encrypted string) (string, error) {
 	if encrypted == "" {
@@ -84,8 +83,8 @@ func DecryptToken(encrypted string) (string, error) {
 	return string(plaintext), nil
 }
 
-// getDerivedKey derives a 32-byte AES key from either SKYCLI_SECRET env var
-// or a combination of hostname and username. Uses SHA256 for key derivation.
+// getDerivedKey derives a 32-byte AES key from either SKYCLI_SECRET env var or a combination of hostname and username.
+// Uses SHA256 for key derivation.
 func getDerivedKey() ([]byte, error) {
 	secret := os.Getenv("SKYCLI_SECRET")
 	if secret == "" {
@@ -117,3 +116,5 @@ func (e *CryptoError) Error() string {
 func (e *CryptoError) Unwrap() error {
 	return e.Err
 }
+
+var _ error = &CryptoError{}
