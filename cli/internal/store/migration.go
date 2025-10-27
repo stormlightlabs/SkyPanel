@@ -12,6 +12,20 @@ import (
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
+type migration struct {
+	Version int
+	Name    string
+	SQL     string
+}
+
+// MigrationStatus represents the current state of database migrations
+type MigrationStatus struct {
+	CurrentVersion int
+	LatestVersion  int
+	PendingCount   int
+	IsUpToDate     bool
+}
+
 // RunMigrations executes all pending up migrations in order.
 // Creates a schema_migrations table to track applied migrations.
 func RunMigrations(db *sql.DB) error {
@@ -75,12 +89,6 @@ func Rollback(db *sql.DB, targetVersion int) error {
 	}
 
 	return nil
-}
-
-type migration struct {
-	Version int
-	Name    string
-	SQL     string
 }
 
 // loadMigrations reads all migration files of the specified direction (up/down)
@@ -175,4 +183,50 @@ func recordMigration(db *sql.DB, version int) error {
 func removeMigration(db *sql.DB, version int) error {
 	_, err := db.Exec("DELETE FROM schema_migrations WHERE version = ?", version)
 	return err
+}
+
+// GetMigrationStatus returns the current migration state of the database.
+// Returns the highest applied version, latest available version, and pending migration count.
+func GetMigrationStatus(db *sql.DB) (*MigrationStatus, error) {
+	if err := createMigrationsTable(db); err != nil {
+		return nil, fmt.Errorf("failed to ensure migrations table: %w", err)
+	}
+
+	applied, err := getAppliedMigrations(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get applied migrations: %w", err)
+	}
+
+	migrations, err := loadMigrations("up")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load migrations: %w", err)
+	}
+
+	status := &MigrationStatus{
+		CurrentVersion: 0,
+		LatestVersion:  0,
+		PendingCount:   0,
+		IsUpToDate:     true,
+	}
+
+	// Find highest applied version
+	for version := range applied {
+		if version > status.CurrentVersion {
+			status.CurrentVersion = version
+		}
+	}
+
+	// Find latest available version and count pending
+	for _, m := range migrations {
+		if m.Version > status.LatestVersion {
+			status.LatestVersion = m.Version
+		}
+		if !applied[m.Version] {
+			status.PendingCount++
+		}
+	}
+
+	status.IsUpToDate = status.PendingCount == 0
+
+	return status, nil
 }

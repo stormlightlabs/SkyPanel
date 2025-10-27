@@ -1,10 +1,21 @@
 package store
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// Repository defines a generic persistence contract.
+type Repository interface {
+	Init(ctx context.Context) error
+	Close() error
+	Get(ctx context.Context, id string) (Model, error)
+	List(ctx context.Context) ([]Model, error)
+	Save(ctx context.Context, feed Model) error
+	Delete(ctx context.Context, id string) error
+}
 
 // Model is the base interface for any persisted domain object.
 type Model interface {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"strings"
@@ -9,9 +10,12 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/stormlightlabs/skypanel/cli/internal/config"
 	"github.com/stormlightlabs/skypanel/cli/internal/export"
 	"github.com/stormlightlabs/skypanel/cli/internal/imports"
 	"github.com/stormlightlabs/skypanel/cli/internal/registry"
+	"github.com/stormlightlabs/skypanel/cli/internal/setup"
 	"github.com/stormlightlabs/skypanel/cli/internal/store"
 	"github.com/stormlightlabs/skypanel/cli/internal/ui"
 	"github.com/urfave/cli/v3"
@@ -34,6 +38,18 @@ func main() {
 		Usage:   "A companion CLI tool for your Bluesky feed ecosystem",
 		Version: "0.1.0",
 		Commands: []*cli.Command{
+			{
+				Name:  "setup",
+				Usage: "Initialize the persistence layer (database and config)",
+				Description: `Initialize the skycli persistence layer by creating:
+   - Config directory at ~/.skycli
+   - SQLite database at ~/.skycli/cache.db
+   - Running all database migrations
+
+   This command is idempotent and safe to run multiple times.
+   It will show the current state and only make necessary changes.`,
+				Action: setupAction,
+			},
 			{
 				Name:  "login",
 				Usage: "Authenticate with Bluesky",
@@ -122,6 +138,10 @@ func main() {
 }
 
 func loginAction(ctx context.Context, cmd *cli.Command) error {
+	if err := setup.EnsurePersistenceReady(ctx); err != nil {
+		return fmt.Errorf("persistence layer not ready: %w", err)
+	}
+
 	logger := ui.GetLogger()
 	reg := registry.Get()
 
@@ -183,6 +203,10 @@ func loginAction(ctx context.Context, cmd *cli.Command) error {
 }
 
 func statusAction(ctx context.Context, cmd *cli.Command) error {
+	if err := setup.EnsurePersistenceReady(ctx); err != nil {
+		return fmt.Errorf("persistence layer not ready: %w", err)
+	}
+
 	logger := ui.GetLogger()
 	reg := registry.Get()
 
@@ -215,6 +239,10 @@ func statusAction(ctx context.Context, cmd *cli.Command) error {
 }
 
 func listAction(ctx context.Context, cmd *cli.Command) error {
+	if err := setup.EnsurePersistenceReady(ctx); err != nil {
+		return fmt.Errorf("persistence layer not ready: %w", err)
+	}
+
 	logger := ui.GetLogger()
 	reg := registry.Get()
 
@@ -253,6 +281,10 @@ func listAction(ctx context.Context, cmd *cli.Command) error {
 }
 
 func viewAction(ctx context.Context, cmd *cli.Command) error {
+	if err := setup.EnsurePersistenceReady(ctx); err != nil {
+		return fmt.Errorf("persistence layer not ready: %w", err)
+	}
+
 	logger := ui.GetLogger()
 	reg := registry.Get()
 
@@ -336,6 +368,10 @@ func viewAction(ctx context.Context, cmd *cli.Command) error {
 }
 
 func exportAction(ctx context.Context, cmd *cli.Command) error {
+	if err := setup.EnsurePersistenceReady(ctx); err != nil {
+		return fmt.Errorf("persistence layer not ready: %w", err)
+	}
+
 	logger := ui.GetLogger()
 	reg := registry.Get()
 
@@ -394,5 +430,94 @@ func exportAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	ui.Successln("Exported %d post(s) to %s", len(posts), filename)
+	return nil
+}
+
+func setupAction(ctx context.Context, cmd *cli.Command) error {
+	logger := ui.GetLogger()
+
+	ui.Titleln("Setup: Initializing persistence layer")
+	fmt.Println()
+
+	configDir, err := config.GetConfigDir()
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
+	}
+
+	dbPath, err := config.GetCacheDB()
+	if err != nil {
+		return fmt.Errorf("failed to get database path: %w", err)
+	}
+
+	ui.Infoln("Config directory: %s", configDir)
+	ui.Infoln("Database path: %s", dbPath)
+	fmt.Println()
+
+	// Check if config directory exists
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		ui.Infoln("Creating config directory...")
+		if err := os.MkdirAll(configDir, 0700); err != nil {
+			logger.Error("Failed to create config directory", "error", err)
+			return err
+		}
+		ui.Successln("Config directory created")
+	} else {
+		ui.Successln("Config directory exists")
+	}
+
+	// Check if database exists
+	dbExists := true
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		dbExists = false
+		ui.Infoln("Database does not exist, will be created")
+	} else {
+		ui.Successln("Database file exists")
+	}
+
+	fmt.Println()
+
+	// Open database (creates if doesn't exist)
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		logger.Error("Failed to open database", "error", err)
+		return err
+	}
+	defer db.Close()
+
+	// Get migration status before running migrations
+	statusBefore, err := store.GetMigrationStatus(db)
+	if err != nil && !dbExists {
+		// If database is new, this is expected
+		logger.Debug("Migration status check returned error (expected for new database)", "error", err)
+		statusBefore = &store.MigrationStatus{CurrentVersion: 0, LatestVersion: 0, PendingCount: 0}
+	} else if err != nil {
+		logger.Error("Failed to check migration status", "error", err)
+		return err
+	}
+
+	if statusBefore.IsUpToDate && dbExists {
+		ui.Successln("Database is up to date (v%d)", statusBefore.CurrentVersion)
+		return nil
+	}
+
+	// Run migrations
+	ui.Infoln("Running migrations...")
+	if err := store.RunMigrations(db); err != nil {
+		logger.Error("Failed to run migrations", "error", err)
+		return err
+	}
+
+	// Get migration status after running migrations
+	statusAfter, err := store.GetMigrationStatus(db)
+	if err != nil {
+		logger.Error("Failed to verify migration status", "error", err)
+		return err
+	}
+
+	fmt.Println()
+	ui.Successln("Setup complete!")
+	ui.Infoln("Database version: v%d", statusAfter.CurrentVersion)
+	ui.Infoln("Migrations applied: %d", statusAfter.CurrentVersion-statusBefore.CurrentVersion)
+
 	return nil
 }
