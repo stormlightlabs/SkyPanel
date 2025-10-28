@@ -80,7 +80,7 @@
         </p>
         {#if mutuals.length > 0}
           <p class="text-xs text-slate-500">
-            Found {mutuals.length} mutual{mutuals.length === 1 ? "" : "s"}. Last computed:{" "}
+            Found {mutuals.length} mutual{mutuals.length === 1 ? "" : "s"}. Last computed:
             {formatComputedAt(computedAt)}.
           </p>
         {/if}
@@ -113,12 +113,12 @@
   {/if}
 
   <section class="space-y-3">
-    {#if !items.length && isComputing}
+    {#if items.length === 0 && isComputing}
       <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
         {loading === "computing" ? "Computing feed…" : "Refreshing feed…"}
         <p class="mt-2 text-xs text-slate-500">This may take a moment for accounts with large follow lists.</p>
       </div>
-    {:else if !items.length}
+    {:else if items.length === 0}
       <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
         {selectedKind ? "No posts found in this feed." : "Select a default feed to get started."}
       </div>

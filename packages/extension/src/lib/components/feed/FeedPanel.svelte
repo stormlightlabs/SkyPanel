@@ -26,6 +26,20 @@
     }
   });
 
+  const getLabel = (kind: "timeline" | "author" | "list") => {
+    switch (kind) {
+      case "timeline": {
+        return "Timeline";
+      }
+      case "author": {
+        return "Author";
+      }
+      case "list": {
+        return "List";
+      }
+    }
+  };
+
   const limitInput = (value: string) => value.trim();
 
   const selectTab = (kind: FeedKind) => {
@@ -59,6 +73,7 @@
     if (disabled || !hasMore || loading !== "idle") return;
     feedStore.loadMore();
   };
+  const kinds = ["timeline", "author", "list"] as const;
 </script>
 
 <div class="space-y-4">
@@ -66,7 +81,7 @@
     <header class="flex items-center justify-between gap-2">
       <nav
         class="inline-flex rounded-full border border-slate-800 bg-slate-950/60 p-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-        {#each ["timeline", "author", "list"] as kind (kind)}
+        {#each kinds as kind (kind)}
           <button
             type="button"
             class="rounded-full px-4 py-1 transition"
@@ -76,7 +91,7 @@
             class:hover:text-sky-200={tab !== kind}
             {disabled}
             onclick={() => selectTab(kind as FeedKind)}>
-            {kind === "timeline" ? "Timeline" : kind === "author" ? "Author" : "List"}
+            {getLabel(kind)}
           </button>
         {/each}
       </nav>
@@ -85,7 +100,7 @@
         class="rounded-full border border-slate-800 bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-slate-700 hover:text-sky-200 disabled:cursor-not-allowed disabled:opacity-60"
         onclick={() => feedStore.reload()}
         disabled={loading !== "idle" || disabled}>
-        {loading !== "idle" ? "…" : "Refresh"}
+        {loading === "idle" ? "Refresh" : "…"}
       </button>
     </header>
 
@@ -151,11 +166,11 @@
   {/if}
 
   <section class="space-y-3">
-    {#if !items.size && loading !== "idle"}
+    {#if items.size === 0 && loading !== "idle"}
       <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
         Loading feed…
       </div>
-    {:else if !items.size}
+    {:else if items.size === 0}
       <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
         Select a feed source to get started.
       </div>

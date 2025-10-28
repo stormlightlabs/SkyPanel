@@ -3,6 +3,7 @@
   import { feedStore } from "$lib/state/feed.svelte";
   import { sessionStore } from "$lib/state/session.svelte";
   import { onMount, untrack } from "svelte";
+  import Toast from "./common/Toast.svelte";
   import FeedSelector from "./feed/FeedSelector.svelte";
   import AuthCard from "./session/AuthCard.svelte";
 
@@ -64,3 +65,5 @@
     {/if}
   </div>
 </div>
+
+<Toast />

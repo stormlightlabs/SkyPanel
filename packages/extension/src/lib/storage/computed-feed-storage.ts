@@ -1,7 +1,7 @@
-import { browser } from "wxt/browser";
-import type { ComputedFeedCache, ComputedFeedKind, CachedComputedFeed } from "$lib/types/computed-feed";
+import { browser } from 'wxt/browser';
+import type { ComputedFeedCache, ComputedFeedKind, CachedComputedFeed } from '$lib/types/computed-feed';
 
-const STORAGE_KEY = "skypanel.computedFeeds";
+const STORAGE_KEY = 'skypanel.computedFeeds';
 
 /**
  * TTL (time-to-live) for mutuals feed cache in milliseconds.
@@ -35,163 +35,165 @@ const QUIET_TTL_MS = 2 * 60 * 60 * 1000;
  * - Clear on logout (handled by parent service)
  */
 export class ComputedFeedStorage {
-  constructor(private readonly storageKey: string = STORAGE_KEY) {}
+	constructor(private readonly storageKey: string = STORAGE_KEY) {}
 
-  /**
-   * Access chrome.storage.local with availability check.
-   */
-  private get storage() {
-    const storage = browser.storage?.local;
-    if (!storage) {
-      console.warn("[ComputedFeedStorage] storage.local is unavailable; skipping persistence.");
-    }
-    return storage;
-  }
+	/**
+	 * Access chrome.storage.local with availability check.
+	 */
+	private get storage() {
+		const storage = browser.storage?.local;
+		if (!storage) {
+			console.warn('[ComputedFeedStorage] storage.local is unavailable; skipping persistence.');
+		}
+		return storage;
+	}
 
-  /**
-   * Get TTL for a specific feed kind.
-   */
-  private getTTL(kind: ComputedFeedKind): number {
-    switch (kind) {
-      case "mutuals":
-        return MUTUALS_TTL_MS;
-      case "quiet":
-        return QUIET_TTL_MS;
-    }
-  }
+	/**
+	 * Get TTL for a specific feed kind.
+	 */
+	private getTTL(kind: ComputedFeedKind): number {
+		switch (kind) {
+			case 'mutuals': {
+				return MUTUALS_TTL_MS;
+			}
+			case 'quiet': {
+				return QUIET_TTL_MS;
+			}
+		}
+	}
 
-  /**
-   * Load cached computed feed from storage.
-   *
-   * Returns undefined if:
-   * - Storage is unavailable
-   * - Feed not found in cache
-   * - Cache has expired (past TTL)
-   *
-   * @param kind - Type of computed feed to load
-   * @returns Cached feed data, or undefined if not found or expired
-   */
-  async load(kind: ComputedFeedKind): Promise<CachedComputedFeed | undefined> {
-    const storage = this.storage;
-    if (!storage) {
-      return undefined;
-    }
+	/**
+	 * Load cached computed feed from storage.
+	 *
+	 * Returns undefined if:
+	 * - Storage is unavailable
+	 * - Feed not found in cache
+	 * - Cache has expired (past TTL)
+	 *
+	 * @param kind - Type of computed feed to load
+	 * @returns Cached feed data, or undefined if not found or expired
+	 */
+	async load(kind: ComputedFeedKind): Promise<CachedComputedFeed | undefined> {
+		const storage = this.storage;
+		if (!storage) {
+			return undefined;
+		}
 
-    try {
-      const result = await storage.get(this.storageKey);
-      const cache = result[this.storageKey] as ComputedFeedCache | undefined;
+		try {
+			const result = await storage.get(this.storageKey);
+			const cache = result[this.storageKey] as ComputedFeedCache | undefined;
 
-      if (!cache) {
-        return undefined;
-      }
+			if (!cache) {
+				return undefined;
+			}
 
-      const cached = cache[kind];
-      if (!cached) {
-        return undefined;
-      }
+			const cached = cache[kind];
+			if (!cached) {
+				return undefined;
+			}
 
-      if (Date.now() > cached.expiresAt) {
-        console.log(`[ComputedFeedStorage] Cache expired for ${kind} feed`);
-        return undefined;
-      }
+			if (Date.now() > cached.expiresAt) {
+				console.log(`[ComputedFeedStorage] Cache expired for ${kind} feed`);
+				return undefined;
+			}
 
-      const remainingMs = cached.expiresAt - Date.now();
-      const remainingMin = Math.floor(remainingMs / 60000);
-      console.log(`[ComputedFeedStorage] Cache hit for ${kind} feed (expires in ${remainingMin}m)`);
+			const remainingMs = cached.expiresAt - Date.now();
+			const remainingMin = Math.floor(remainingMs / 60_000);
+			console.log(`[ComputedFeedStorage] Cache hit for ${kind} feed (expires in ${remainingMin}m)`);
 
-      return cached;
-    } catch (error) {
-      console.error("[ComputedFeedStorage] Failed to load cache", { kind, error });
-      return undefined;
-    }
-  }
+			return cached;
+		} catch (error) {
+			console.error('[ComputedFeedStorage] Failed to load cache', { kind, error });
+			return undefined;
+		}
+	}
 
-  /**
-   * Save computed feed to cache with TTL-based expiration.
-   *
-   * @param cached - Computed feed data to cache
-   */
-  async save(cached: CachedComputedFeed): Promise<void> {
-    const storage = this.storage;
-    if (!storage) {
-      return;
-    }
+	/**
+	 * Save computed feed to cache with TTL-based expiration.
+	 *
+	 * @param cached - Computed feed data to cache
+	 */
+	async save(cached: CachedComputedFeed): Promise<void> {
+		const storage = this.storage;
+		if (!storage) {
+			return;
+		}
 
-    try {
-      const result = await storage.get(this.storageKey);
-      const cache = (result[this.storageKey] as ComputedFeedCache | undefined) ?? {};
+		try {
+			const result = await storage.get(this.storageKey);
+			const cache = (result[this.storageKey] as ComputedFeedCache | undefined) ?? {};
 
-      cache[cached.kind] = cached;
+			cache[cached.kind] = cached;
 
-      await storage.set({ [this.storageKey]: cache });
+			await storage.set({ [this.storageKey]: cache });
 
-      const ttlMin = Math.floor((cached.expiresAt - cached.computedAt) / 60000);
-      console.log(`[ComputedFeedStorage] Cached ${cached.kind} feed (TTL: ${ttlMin}m)`);
-    } catch (error) {
-      console.error("[ComputedFeedStorage] Failed to save cache", { kind: cached.kind, error });
-    }
-  }
+			const ttlMin = Math.floor((cached.expiresAt - cached.computedAt) / 60_000);
+			console.log(`[ComputedFeedStorage] Cached ${cached.kind} feed (TTL: ${ttlMin}m)`);
+		} catch (error) {
+			console.error('[ComputedFeedStorage] Failed to save cache', { kind: cached.kind, error });
+		}
+	}
 
-  /**
-   * Create a cached feed entry with automatic TTL calculation.
-   *
-   * @param kind - Type of computed feed
-   * @param data - Computed feed result
-   * @returns Cached feed with computed expiration time
-   */
-  createCached(kind: ComputedFeedKind, data: CachedComputedFeed["data"]): CachedComputedFeed {
-    const now = Date.now();
-    const ttl = this.getTTL(kind);
+	/**
+	 * Create a cached feed entry with automatic TTL calculation.
+	 *
+	 * @param kind - Type of computed feed
+	 * @param data - Computed feed result
+	 * @returns Cached feed with computed expiration time
+	 */
+	createCached(kind: ComputedFeedKind, data: CachedComputedFeed['data']): CachedComputedFeed {
+		const now = Date.now();
+		const ttl = this.getTTL(kind);
 
-    return { kind, data, computedAt: now, expiresAt: now + ttl };
-  }
+		return { kind, data, computedAt: now, expiresAt: now + ttl };
+	}
 
-  /**
-   * Clear specific computed feed from cache.
-   *
-   * @param kind - Type of computed feed to clear
-   */
-  async clear(kind: ComputedFeedKind): Promise<void> {
-    const storage = this.storage;
-    if (!storage) {
-      return;
-    }
+	/**
+	 * Clear specific computed feed from cache.
+	 *
+	 * @param kind - Type of computed feed to clear
+	 */
+	async clear(kind: ComputedFeedKind): Promise<void> {
+		const storage = this.storage;
+		if (!storage) {
+			return;
+		}
 
-    try {
-      const result = await storage.get(this.storageKey);
-      const cache = result[this.storageKey] as ComputedFeedCache | undefined;
+		try {
+			const result = await storage.get(this.storageKey);
+			const cache = result[this.storageKey] as ComputedFeedCache | undefined;
 
-      if (!cache) {
-        return;
-      }
+			if (!cache) {
+				return;
+			}
 
-      delete cache[kind];
+			delete cache[kind];
 
-      await storage.set({ [this.storageKey]: cache });
-      console.log(`[ComputedFeedStorage] Cleared ${kind} feed from cache`);
-    } catch (error) {
-      console.error("[ComputedFeedStorage] Failed to clear cache", { kind, error });
-    }
-  }
+			await storage.set({ [this.storageKey]: cache });
+			console.log(`[ComputedFeedStorage] Cleared ${kind} feed from cache`);
+		} catch (error) {
+			console.error('[ComputedFeedStorage] Failed to clear cache', { kind, error });
+		}
+	}
 
-  /**
-   * Clear all computed feeds from cache.
-   *
-   * Useful on logout or when user explicitly requests cache refresh.
-   */
-  async clearAll(): Promise<void> {
-    const storage = this.storage;
-    if (!storage) {
-      return;
-    }
+	/**
+	 * Clear all computed feeds from cache.
+	 *
+	 * Useful on logout or when user explicitly requests cache refresh.
+	 */
+	async clearAll(): Promise<void> {
+		const storage = this.storage;
+		if (!storage) {
+			return;
+		}
 
-    try {
-      await storage.remove(this.storageKey);
-      console.log("[ComputedFeedStorage] Cleared all computed feed caches");
-    } catch (error) {
-      console.error("[ComputedFeedStorage] Failed to clear all caches", error);
-    }
-  }
+		try {
+			await storage.remove(this.storageKey);
+			console.log('[ComputedFeedStorage] Cleared all computed feed caches');
+		} catch (error) {
+			console.error('[ComputedFeedStorage] Failed to clear all caches', error);
+		}
+	}
 }
 
 /**

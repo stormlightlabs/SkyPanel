@@ -1,11 +1,12 @@
 <script lang="ts">
+  import ProfileView from "../profile/ProfileView.svelte";
   import DefaultFeedSelector from "./DefaultFeedSelector.svelte";
   import FeedPanel from "./FeedPanel.svelte";
 
   let { disabled = false } = $props();
-  let feedMode = $state<"standard" | "default">("standard");
+  let feedMode = $state<"standard" | "default" | "profile">("standard");
 
-  const selectMode = (mode: "standard" | "default") => {
+  const selectMode = (mode: "standard" | "default" | "profile") => {
     if (disabled) return;
     feedMode = mode;
   };
@@ -13,6 +14,7 @@
   const options = [
     { mode: "standard", label: "Standard Feeds" },
     { mode: "default", label: "Default Feeds" },
+    { mode: "profile", label: "My Profile" },
   ] as const;
 </script>
 
@@ -38,7 +40,9 @@
 
   {#if feedMode === "standard"}
     <FeedPanel {disabled} />
-  {:else}
+  {:else if feedMode === "default"}
     <DefaultFeedSelector {disabled} />
+  {:else if feedMode === "profile"}
+    <ProfileView />
   {/if}
 </div>
