@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { resetComputedFeed } from "$lib/state/computed-feed.svelte";
   import { resetFeed, selectFeed } from "$lib/state/feed.svelte";
   import { hydrateSession, isAuthenticated, sessionHydrated } from "$lib/state/session.svelte";
   import { onMount, untrack } from "svelte";
-  import FeedPanel from "./feed/FeedPanel.svelte";
+  import FeedSelector from "./feed/FeedSelector.svelte";
   import AuthCard from "./session/AuthCard.svelte";
 
   let bootstrapped = $state(false);
@@ -26,6 +27,7 @@
         bootstrapped = false;
       });
       resetFeed();
+      resetComputedFeed();
     }
   });
 </script>
@@ -48,7 +50,7 @@
     <AuthCard />
 
     {#if sessionHydrated && authenticated}
-      <FeedPanel />
+      <FeedSelector />
     {:else}
       <div class="rounded-xl border border-slate-800/50 bg-slate-900/60 p-6 text-sm text-slate-400">
         {#if !sessionHydrated}

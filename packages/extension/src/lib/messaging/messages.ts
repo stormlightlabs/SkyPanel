@@ -1,11 +1,13 @@
 import type { FeedRequest, FeedResult } from "$lib/types/feed";
 import type { SessionSnapshot } from "$lib/types/session";
+import type { ComputedFeedRequest, ComputedFeedResult } from "$lib/types/computed-feed";
 
 export type BackgroundRequest =
   | { type: "session:get" }
   | { type: "session:login"; identifier: string; password: string }
   | { type: "session:logout" }
-  | { type: "feed:get"; request: FeedRequest };
+  | { type: "feed:get"; request: FeedRequest }
+  | { type: "computed-feed:get"; request: ComputedFeedRequest };
 
 export type BackgroundError = { type: "error"; error: string };
 export type SessionResponse = { type: "session"; session?: SessionSnapshot; authenticated: boolean };
@@ -14,6 +16,8 @@ export type LoginResponseError = { type: "session:login"; ok: false; error: stri
 export type LogoutResponse = { type: "session:logout"; ok: true };
 export type FeedResponseOk = { type: "feed"; ok: true; result: FeedResult };
 export type FeedResponseError = { type: "feed"; ok: false; error: string };
+export type ComputedFeedResponseOk = { type: "computed-feed"; ok: true; result: ComputedFeedResult };
+export type ComputedFeedResponseError = { type: "computed-feed"; ok: false; error: string };
 export type SessionChangedEvent = { type: "session:changed"; session?: SessionSnapshot; authenticated: boolean };
 
 export type BackgroundResponse =
@@ -23,6 +27,8 @@ export type BackgroundResponse =
   | LogoutResponse
   | FeedResponseOk
   | FeedResponseError
+  | ComputedFeedResponseOk
+  | ComputedFeedResponseError
   | BackgroundError;
 
 export type RuntimeMessage = BackgroundResponse | SessionChangedEvent;
@@ -42,6 +48,10 @@ export const isBackgroundRequest = (input: unknown): input is BackgroundRequest 
     }
     case "feed:get": {
       const req = (input as { request?: FeedRequest }).request;
+      return !!req && typeof req === "object" && "kind" in req;
+    }
+    case "computed-feed:get": {
+      const req = (input as { request?: ComputedFeedRequest }).request;
       return !!req && typeof req === "object" && "kind" in req;
     }
     default:

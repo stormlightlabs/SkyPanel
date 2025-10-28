@@ -1,6 +1,9 @@
 import { browser } from "wxt/browser";
 import { FeedService } from "$lib/background/feed-service";
 import { SessionManager } from "$lib/background/session-manager";
+import { GraphService } from "$lib/background/graph-service";
+import { FeedComputer } from "$lib/background/feed-computer";
+import { computedFeedStorage } from "$lib/storage/computed-feed-storage";
 import {
   isBackgroundRequest,
   type BackgroundRequest,
@@ -10,6 +13,8 @@ import {
 
 const sessions = new SessionManager();
 const feeds = new FeedService(sessions);
+const graphs = new GraphService(sessions);
+const computer = new FeedComputer(sessions, graphs, feeds);
 
 type ChromiumSidePanelApi = {
   open(options?: { windowId?: number }): Promise<void>;
@@ -32,6 +37,7 @@ async function handleRequest(request: BackgroundRequest): Promise<BackgroundResp
     }
     case "session:logout": {
       await sessions.logout();
+      await computedFeedStorage.clearAll();
       return { type: "session:logout", ok: true };
     }
     case "feed:get": {
@@ -41,6 +47,45 @@ async function handleRequest(request: BackgroundRequest): Promise<BackgroundResp
       } catch (error) {
         console.error("[background] feed fetch failed", error);
         return { type: "feed", ok: false, error: error instanceof Error ? error.message : "Unable to load feed" };
+      }
+    }
+    case "computed-feed:get": {
+      try {
+        const { request: feedRequest } = request;
+        const forceRefresh = feedRequest.forceRefresh ?? false;
+
+        if (!forceRefresh) {
+          const cached = await computedFeedStorage.load(feedRequest.kind);
+          if (cached) {
+            return { type: "computed-feed", ok: true, result: cached.data };
+          }
+        }
+
+        let result;
+        switch (feedRequest.kind) {
+          case "mutuals":
+            result = await computer.computeMutualsFeed(feedRequest.cursor, feedRequest.limit);
+            break;
+          case "quiet":
+            result = await computer.computeQuietPostersFeed(feedRequest.cursor, feedRequest.limit);
+            break;
+          default: {
+            const exhaustive: never = feedRequest;
+            throw new Error(`Unsupported computed feed kind: ${(exhaustive as { kind: string }).kind}`);
+          }
+        }
+
+        const cached = computedFeedStorage.createCached(feedRequest.kind, result);
+        await computedFeedStorage.save(cached);
+
+        return { type: "computed-feed", ok: true, result };
+      } catch (error) {
+        console.error("[background] computed feed fetch failed", error);
+        return {
+          type: "computed-feed",
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to compute feed",
+        };
       }
     }
     default:
@@ -73,9 +118,10 @@ export default defineBackground(() => {
       session: snapshot,
       authenticated: sessions.authenticated,
     };
-    browser.runtime.sendMessage(message).catch(() => {
+    browser.runtime.sendMessage(message).catch(
       // No-op: no listeners are available.
-    });
+      () => void 0,
+    );
   });
 
   browser.runtime.onMessage.addListener((message) => {

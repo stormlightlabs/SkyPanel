@@ -16,10 +16,5 @@ export default defineConfig({
   srcDir: "src",
   modules: ["@wxt-dev/module-svelte", "@wxt-dev/auto-icons"],
   vite: () => ({ plugins: [tailwindcss()], resolve: { alias } }),
-  manifest: {
-    action: {
-      default_title: "SkyPanel",
-    },
-    permissions: ["sidePanel"],
-  },
+  manifest: { action: { default_title: "SkyPanel" }, permissions: ["sidePanel", "storage"] },
 });

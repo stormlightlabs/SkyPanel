@@ -3,9 +3,10 @@ const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-export function formatDistanceToNow(date: Date): string {
+export function formatDistanceToNow(date: Date | number): string {
   const now = Date.now();
-  const diff = Math.max(0, now - date.getTime());
+  const timestamp = typeof date === "number" ? date : date.getTime();
+  const diff = Math.max(0, now - timestamp);
 
   if (diff < MINUTE) {
     const seconds = Math.floor(diff / SECOND);
@@ -27,9 +28,10 @@ export function formatDistanceToNow(date: Date): string {
     return `${days}d ago`;
   }
 
-  return date.toLocaleDateString(undefined, {
+  const dateObj = typeof date === "number" ? new Date(date) : date;
+  return dateObj.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
-    year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+    year: dateObj.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
   });
 }

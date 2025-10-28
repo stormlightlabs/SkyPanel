@@ -1,36 +1,16 @@
 # ROADMAP - "SkyPanel"
 
-## Auth & Session
-
-- Use `AtpAgent` (or `BskyAgent` via default export) with **App Password** auth initially; isolate session management in the service worker, expose to UI via message passing.
-- Include session resume (persist in `chrome.storage.local`).
-- Done?: User can sign in with handle + app password; agent session persists across browser restarts.
-
-## Core Feeds
-
-- Implement "Home timeline" (reverse-chronological) via `app.bsky.feed.getTimeline`.
-- Add "Author feed" view via `app.bsky.feed.getAuthorFeed`.
-- Add "List feed" by AT-URI via `app.bsky.feed.getListFeed`.
-- Provide infinite scroll + robust cursor pagination.
-- Done?: Three feed sources working with pagination & basic post rendering.
-
-## Default Feeds (Mutuals, Quiet Posters)
-
-- Mutuals:
-    - Intersect `getFollows(actor)` and `getFollowers(actor)` to compute accounts where follow is reciprocal
-        - Show posts only from that set
-- Quiet Posters:
-    - Compute posting rate per follow using recent `getAuthorFeed` windows; surface authors below a threshold (configurable)
-    - Prioritized by recency to avoid missing sparse posters
-
-Done?: Two prebuilt feeds appear; computation cached locally and refreshable.
-
 ## Private / Locally Stored Feeds
 
 - Local schema for "feed definitions" (JSON): sources (author/list/timeline), include/exclude sets, rate-based rules, label/mute filters.
     - Persist with `chrome.storage.local`; version with simple migrations.
 - No remote publishing; these feeds are **private** by design.
 - Done?: User can create, rename, clone, delete local feeds; all entirely client-side.
+
+## Media
+
+- Download videos
+- Download images
 
 ## Collapse Multiple Unread per Follower
 
