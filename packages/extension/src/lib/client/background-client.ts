@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import type { FeedRequest } from '$lib/types/feed';
 import type { ComputedFeedRequest } from '$lib/types/computed-feed';
+import type { SearchRequest } from '$lib/types/search';
 import type {
 	BackgroundRequest,
 	BackgroundResponse,
@@ -13,8 +14,16 @@ import type {
 	ComputedFeedResponseOk,
 	ComputedFeedResponseError,
 	ProfileResponseOk,
-	ProfileResponseError
+	ProfileResponseError,
+	SearchResponseOk,
+	SearchResponseError
 } from '$lib/messaging/messages';
+
+type TSearchResult = SearchResponseOk | SearchResponseError;
+type TLoginResult = LoginResponseOk | LoginResponseError;
+type TFeedResult = FeedResponseOk | FeedResponseError;
+type TComputedFeedResult = ComputedFeedResponseOk | ComputedFeedResponseError;
+type TProfileResult = ProfileResponseOk | ProfileResponseError;
 
 export class BackgroundClient {
 	private readonly maxRetries = 5;
@@ -70,24 +79,28 @@ export class BackgroundClient {
 		return this.request<SessionResponse>({ type: 'session:get' });
 	}
 
-	async login(identifier: string, password: string): Promise<LoginResponseOk | LoginResponseError> {
-		return this.request<LoginResponseOk | LoginResponseError>({ type: 'session:login', identifier, password });
+	async login(identifier: string, password: string): Promise<TLoginResult> {
+		return this.request<TLoginResult>({ type: 'session:login', identifier, password });
 	}
 
 	async logout(): Promise<LogoutResponse> {
 		return this.request<LogoutResponse>({ type: 'session:logout' });
 	}
 
-	async fetchFeed(request: FeedRequest): Promise<FeedResponseOk | FeedResponseError> {
-		return this.request<FeedResponseOk | FeedResponseError>({ type: 'feed:get', request });
+	async fetchFeed(request: FeedRequest): Promise<TFeedResult> {
+		return this.request<TFeedResult>({ type: 'feed:get', request });
 	}
 
-	async fetchComputedFeed(request: ComputedFeedRequest): Promise<ComputedFeedResponseOk | ComputedFeedResponseError> {
-		return this.request<ComputedFeedResponseOk | ComputedFeedResponseError>({ type: 'computed-feed:get', request });
+	async fetchComputedFeed(request: ComputedFeedRequest): Promise<TComputedFeedResult> {
+		return this.request<TComputedFeedResult>({ type: 'computed-feed:get', request });
 	}
 
-	async getProfile(actor?: string): Promise<ProfileResponseOk | ProfileResponseError> {
-		return this.request<ProfileResponseOk | ProfileResponseError>({ type: 'profile:get', actor });
+	async getProfile(actor?: string): Promise<TProfileResult> {
+		return this.request<TProfileResult>({ type: 'profile:get', actor });
+	}
+
+	async searchPosts(request: SearchRequest): Promise<TSearchResult> {
+		return this.request<TSearchResult>({ type: 'search:posts', request });
 	}
 }
 

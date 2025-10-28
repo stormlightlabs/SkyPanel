@@ -2,6 +2,7 @@ import type { FeedRequest, FeedResult } from '$lib/types/feed';
 import type { SessionSnapshot } from '$lib/types/session';
 import type { ComputedFeedRequest, ComputedFeedResult } from '$lib/types/computed-feed';
 import type { ProfileViewDetailed } from '$lib/types/profile';
+import type { SearchRequest, SearchResult } from '$lib/types/search';
 
 export type BackgroundRequest =
 	| { type: 'session:get' }
@@ -9,7 +10,8 @@ export type BackgroundRequest =
 	| { type: 'session:logout' }
 	| { type: 'feed:get'; request: FeedRequest }
 	| { type: 'computed-feed:get'; request: ComputedFeedRequest }
-	| { type: 'profile:get'; actor?: string };
+	| { type: 'profile:get'; actor?: string }
+	| { type: 'search:posts'; request: SearchRequest };
 
 export type BackgroundError = { type: 'error'; error: string };
 export type SessionResponse = { type: 'session'; session?: SessionSnapshot; authenticated: boolean };
@@ -22,6 +24,8 @@ export type ComputedFeedResponseOk = { type: 'computed-feed'; ok: true; result: 
 export type ComputedFeedResponseError = { type: 'computed-feed'; ok: false; error: string };
 export type ProfileResponseOk = { type: 'profile'; ok: true; profile: ProfileViewDetailed };
 export type ProfileResponseError = { type: 'profile'; ok: false; error: string };
+export type SearchResponseOk = { type: 'search'; ok: true; result: SearchResult };
+export type SearchResponseError = { type: 'search'; ok: false; error: string };
 export type SessionChangedEvent = { type: 'session:changed'; session?: SessionSnapshot; authenticated: boolean };
 
 export type BackgroundResponse =
@@ -35,6 +39,8 @@ export type BackgroundResponse =
 	| ComputedFeedResponseError
 	| ProfileResponseOk
 	| ProfileResponseError
+	| SearchResponseOk
+	| SearchResponseError
 	| BackgroundError;
 
 export type RuntimeMessage = BackgroundResponse | SessionChangedEvent;
@@ -61,6 +67,10 @@ export const isBackgroundRequest = (input: unknown): input is BackgroundRequest 
 		case 'computed-feed:get': {
 			const req = (input as { request?: ComputedFeedRequest }).request;
 			return !!req && typeof req === 'object' && 'kind' in req;
+		}
+		case 'search:posts': {
+			const req = (input as { request?: SearchRequest }).request;
+			return !!req && typeof req === 'object' && 'query' in req && typeof req.query === 'string';
 		}
 		default: {
 			return false;

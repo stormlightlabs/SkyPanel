@@ -1,20 +1,25 @@
 <script lang="ts">
-  import ProfileView from "../profile/ProfileView.svelte";
+  import CustomFeedPanel from "$lib/components/custom-feed/CustomFeedPanel.svelte";
+  import ProfileView from "$lib/components/profile/ProfileView.svelte";
+  import SearchPanel from "$lib/components/search/SearchPanel.svelte";
   import DefaultFeedSelector from "./DefaultFeedSelector.svelte";
   import FeedPanel from "./FeedPanel.svelte";
 
+  type Mode = "standard" | "default" | "profile" | "search" | "custom";
   let { disabled = false } = $props();
-  let feedMode = $state<"standard" | "default" | "profile">("standard");
+  let feedMode = $state<Mode>("standard");
 
-  const selectMode = (mode: "standard" | "default" | "profile") => {
+  const selectMode = (mode: Mode) => {
     if (disabled) return;
     feedMode = mode;
   };
 
   const options = [
-    { mode: "standard", label: "Standard Feeds" },
-    { mode: "default", label: "Default Feeds" },
-    { mode: "profile", label: "My Profile" },
+    { mode: "standard", label: "Standard" },
+    { mode: "default", label: "Computed" },
+    { mode: "search", label: "Search" },
+    { mode: "custom", label: "Custom" },
+    { mode: "profile", label: "Profile" },
   ] as const;
 </script>
 
@@ -42,6 +47,10 @@
     <FeedPanel {disabled} />
   {:else if feedMode === "default"}
     <DefaultFeedSelector {disabled} />
+  {:else if feedMode === "search"}
+    <SearchPanel />
+  {:else if feedMode === "custom"}
+    <CustomFeedPanel />
   {:else if feedMode === "profile"}
     <ProfileView />
   {/if}

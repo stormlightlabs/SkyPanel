@@ -2,15 +2,17 @@
 
 ## Private / Locally Stored Feeds
 
-- Local schema for "feed definitions" (JSON): sources (author/list/timeline), include/exclude sets, rate-based rules, label/mute filters.
-    - Persist with `chrome.storage.local`; version with simple migrations.
-- No remote publishing; these feeds are **private** by design.
-- Done?: User can create, rename, clone, delete local feeds; all entirely client-side.
+- Implement feed execution engine (fetch from sources, apply filters)
+- Add FeedBuilder UI for rich feed creation/editing
+- Support multiple sources per feed
+- Implement author, rate-based, label, and keyword filters
+- Add feed preview before saving
 
 ## Media
 
-- Download videos
-- Download images
+- On-the-fly layout switcher UI (stacked/grid/carousel toggle)
+    - Grid layout option for multiple images (2x2 for 4 images, 2x1 for 2)
+    - Carousel layout with prev/next navigation
 
 ## Collapse Multiple Unread per Follower
 
@@ -19,21 +21,24 @@
 - Mark-read semantics: collapse disappears when user expands or scrolls past.
 - Done?: Long runs from prolific authors collapse to a single row with accurate unread counts.
 
+## My Profile
+
+- Implement edit profile functionality
+- Implement share profile functionality
+- Add profile refresh
+- Add profile caching
+
 ## Search
 
-- UI for `app.bsky.feed.searchPosts` with filters (query string, author, tag/hashtag, domain, lang, date ranges).
-    - Add quick-scope shorthands (e.g., `from:@handle`, `#tag`, `site:domain.tld`).
-- Paginate and allow "save as local feed" from a search query.
-- Done?: Search page returns results with filters; any search can be stored as a private feed.
+- Add advanced filters (tags, domain, URL)
+- Implement quick-scope shorthands (e.g., `from:@handle`, `#tag`, `site:domain.tld`)
+- Add pagination for search results
+- Add search result preview in feed cards
 
 ## Resilience
 
 - Cursor-aware caching, exponential backoff, and transparent error banners.
 - Respect Bluesky rate limits and show user friendly notices + retry guidance.
-- Done?: Rate-limit events are handled gracefully.
-
-## Finishing Pass
-
 - Accessibility sweep
 - Keyboard navigation across lists
 - ARIA for collapsibles.

@@ -15,29 +15,54 @@
   const indexedAt = $derived(post?.indexedAt ? new Date(post.indexedAt) : null);
   const reason = $derived(item.reason as { $type?: string; by?: AppBskyActorDefs.ProfileViewBasic } | undefined);
   const embed = $derived(post?.embed as PostEmbed | undefined);
-
-  const reasonLabel = $derived.by(() => {
-    if (reason?.$type === "app.bsky.feed.defs#reasonRepost") {
-      return `Reposted by ${reason?.by?.displayName ?? `@${reason?.by?.handle ?? "unknown"}`}`;
-    } else if (reason?.$type === "app.bsky.feed.defs#reasonTrend") {
-      return "Trending";
-    }
-    return null;
-  });
+  const isRepost = $derived(reason?.$type === "app.bsky.feed.defs#reasonRepost");
+  const isTrending = $derived(reason?.$type === "app.bsky.feed.defs#reasonTrend");
+  const reposter = $derived(isRepost ? reason?.by : undefined);
 </script>
 
 <article class="rounded-xl border border-slate-800/40 bg-slate-900/80 p-4 shadow-lg shadow-slate-950/30">
-  {#if reasonLabel}
-    <p class="text-xs uppercase tracking-wide text-sky-300/80">{reasonLabel}</p>
+  {#if isRepost && reposter}
+    <p class="text-xs uppercase tracking-wide text-sky-300/80">
+      Reposted by
+      {#if reposter.handle}
+        <a
+          href="https://bsky.app/profile/{reposter.handle}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:text-sky-200 hover:underline">
+          {reposter.displayName || `@${reposter.handle}`}
+        </a>
+      {:else}
+        {reposter.displayName || "Unknown"}
+      {/if}
+    </p>
+  {:else if isTrending}
+    <p class="text-xs uppercase tracking-wide text-sky-300/80">Trending</p>
   {/if}
 
   <header class="mt-1 flex items-start justify-between gap-2">
     <div>
       <p class="text-sm font-semibold text-slate-100">
-        {#if author?.displayName}{author.displayName}{:else}@{author?.handle}{/if}
+        {#if author?.handle}
+          <a
+            href="https://bsky.app/profile/{author.handle}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hover:text-sky-400 hover:underline">
+            {author.displayName || `@${author.handle}`}
+          </a>
+        {:else}
+          {author?.displayName || "Unknown"}
+        {/if}
       </p>
-      {#if author?.displayName}
-        <p class="text-xs text-slate-400">@{author.handle}</p>
+      {#if author?.displayName && author?.handle}
+        <a
+          href="https://bsky.app/profile/{author.handle}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-xs text-slate-400 hover:text-sky-400 hover:underline">
+          @{author.handle}
+        </a>
       {/if}
     </div>
     {#if indexedAt}
@@ -63,6 +88,7 @@
     </div>
   {/if}
 
+  <!-- TODO: Replace emojis with icons (egoist?) -->
   <footer class="mt-4 flex items-center gap-4 text-xs text-slate-500">
     <span>💬 {post?.replyCount ?? 0}</span>
     <span>🔁 {post?.repostCount ?? 0}</span>

@@ -4,6 +4,7 @@ import { SessionManager } from '$lib/background/session-manager';
 import { GraphService } from '$lib/background/graph-service';
 import { FeedComputer } from '$lib/background/feed-computer';
 import { ProfileService } from '$lib/background/profile-service';
+import { SearchService } from '$lib/background/search-service';
 import { computedFeedStorage } from '$lib/storage/computed-feed-storage';
 import {
 	isBackgroundRequest,
@@ -17,6 +18,7 @@ const feeds = new FeedService(sessions);
 const graphs = new GraphService(sessions);
 const computer = new FeedComputer(sessions, graphs, feeds);
 const profiles = new ProfileService(sessions);
+const search = new SearchService(sessions);
 
 type ChromiumSidePanelApi = {
 	open(options?: { windowId?: number }): Promise<void>;
@@ -106,6 +108,15 @@ async function handleRequest(request: BackgroundRequest): Promise<BackgroundResp
 			} catch (error) {
 				console.error('[background] profile fetch failed', error);
 				return { type: 'profile', ok: false, error: error instanceof Error ? error.message : 'Unable to load profile' };
+			}
+		}
+		case 'search:posts': {
+			try {
+				const result = await search.search(request.request);
+				return { type: 'search', ok: true, result };
+			} catch (error) {
+				console.error('[background] search failed', error);
+				return { type: 'search', ok: false, error: error instanceof Error ? error.message : 'Unable to search posts' };
 			}
 		}
 		default: {
