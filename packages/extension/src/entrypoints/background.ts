@@ -11,6 +11,11 @@ import {
 const sessions = new SessionManager();
 const feeds = new FeedService(sessions);
 
+type ChromiumSidePanelApi = {
+  open(options?: { windowId?: number }): Promise<void>;
+  setPanelBehavior?(options: { openPanelOnActionClick: boolean }): Promise<void>;
+};
+
 async function handleRequest(request: BackgroundRequest): Promise<BackgroundResponse> {
   switch (request.type) {
     case "session:get": {
@@ -47,6 +52,20 @@ export default defineBackground(() => {
   sessions.resumeFromStorage().catch((error) => {
     console.warn("[background] failed to resume session", error);
   });
+
+  const sidePanel = (browser as typeof browser & { sidePanel?: ChromiumSidePanelApi }).sidePanel;
+  if (sidePanel) {
+    sidePanel.setPanelBehavior?.({ openPanelOnActionClick: true }).catch((error) => {
+      console.warn("[background] failed to enable action side panel behavior", error);
+    });
+
+    browser.action?.onClicked.addListener((tab) => {
+      const windowId = tab.windowId;
+      sidePanel.open(windowId != null ? { windowId } : {}).catch((error) => {
+        console.error("[background] failed to open side panel from action click", error);
+      });
+    });
+  }
 
   sessions.subscribe((snapshot) => {
     const message: SessionChangedEvent = {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
-    authenticated,
     hydrateSession,
+    isAuthenticated,
     login,
     logout,
     sessionError,
@@ -15,6 +15,7 @@
   let showPassword = $state(false);
   const handleId = $state("auth-handle");
   const passwordId = $state("auth-password");
+  const authenticated = $derived.by(isAuthenticated);
 
   onMount(() => {
     hydrateSession();

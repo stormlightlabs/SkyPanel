@@ -2,9 +2,9 @@
   import {
     currentFeed,
     feedError,
-    feedHasMore,
     feedItems,
     feedLoading,
+    getFeedHasMore,
     loadMore,
     reloadActiveFeed,
     selectFeed,
@@ -20,6 +20,7 @@
 
   const authorInputId = "feed-author";
   const listInputId = "feed-list";
+  const feedHasMore = $derived.by(getFeedHasMore);
 
   $effect(() => {
     const current = currentFeed;

@@ -16,8 +16,8 @@ export const feedCursor = cursor;
 export const feedLoading = loading;
 export const feedError = errorMessage;
 export const currentFeed = activeRequest;
-export const feedEmpty = $derived(loading === "idle" && items.length === 0);
-export const feedHasMore = $derived(typeof cursor === "string" && cursor.length > 0);
+export const getFeedEmpty = () => loading === "idle" && items.length === 0;
+export const getFeedHasMore = () => typeof cursor === "string" && cursor.length > 0;
 
 export async function selectFeed(request: FeedRequest): Promise<void> {
   activeRequest = request;

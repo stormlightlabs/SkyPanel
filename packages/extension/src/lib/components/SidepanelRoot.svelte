@@ -1,12 +1,12 @@
 <script lang="ts">
   import { resetFeed, selectFeed } from "$lib/state/feed.svelte";
-  import { authenticated, hydrateSession, sessionHydrated } from "$lib/state/session.svelte";
+  import { hydrateSession, isAuthenticated, sessionHydrated } from "$lib/state/session.svelte";
   import { onMount, untrack } from "svelte";
   import FeedPanel from "./feed/FeedPanel.svelte";
   import AuthCard from "./session/AuthCard.svelte";
 
   let bootstrapped = $state(false);
-
+  const authenticated = $derived.by(isAuthenticated);
   onMount(() => {
     hydrateSession();
   });

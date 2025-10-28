@@ -9,7 +9,7 @@ let errorMessage = $state<string>();
 let hydrated = $state(false);
 let hydratePromise: Promise<void> | null = null;
 
-export const authenticated = $derived(!!session);
+export const isAuthenticated = () => !!session;
 export const sessionStore = session;
 export const sessionStatus = status;
 export const sessionError = errorMessage;
