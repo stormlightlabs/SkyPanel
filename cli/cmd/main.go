@@ -23,6 +23,12 @@ func main() {
 	}
 	defer reg.Close()
 
+	// Configure styled help templates
+	cli.HelpPrinter = ui.StyledHelpPrinter
+	cli.RootCommandHelpTemplate = ui.RootCommandHelpTemplate
+	cli.CommandHelpTemplate = ui.CommandHelpTemplate
+	cli.SubcommandHelpTemplate = ui.SubcommandHelpTemplate
+
 	app := &cli.Command{
 		Name:    "skycli",
 		Usage:   "A companion CLI tool for your Bluesky feed ecosystem",
