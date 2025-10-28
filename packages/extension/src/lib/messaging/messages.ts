@@ -1,7 +1,7 @@
-import type { FeedRequest, FeedResult } from '$lib/types/feed';
+import type { FeedRequest, FeedResult, ThreadRequest, ThreadResult } from '$lib/types/feed';
 import type { SessionSnapshot } from '$lib/types/session';
 import type { ComputedFeedRequest, ComputedFeedResult } from '$lib/types/computed-feed';
-import type { ProfileViewDetailed } from '$lib/types/profile';
+import type { ProfileViewDetailed, ProfileRequest } from '$lib/types/profile';
 import type { SearchRequest, SearchResult } from '$lib/types/search';
 
 export type BackgroundRequest =
@@ -10,8 +10,9 @@ export type BackgroundRequest =
 	| { type: 'session:logout' }
 	| { type: 'feed:get'; request: FeedRequest }
 	| { type: 'computed-feed:get'; request: ComputedFeedRequest }
-	| { type: 'profile:get'; actor?: string }
-	| { type: 'search:posts'; request: SearchRequest };
+	| { type: 'profile:get'; request: ProfileRequest }
+	| { type: 'search:posts'; request: SearchRequest }
+	| { type: 'thread:get'; request: ThreadRequest };
 
 export type BackgroundError = { type: 'error'; error: string };
 export type SessionResponse = { type: 'session'; session?: SessionSnapshot; authenticated: boolean };
@@ -22,10 +23,12 @@ export type FeedResponseOk = { type: 'feed'; ok: true; result: FeedResult };
 export type FeedResponseError = { type: 'feed'; ok: false; error: string };
 export type ComputedFeedResponseOk = { type: 'computed-feed'; ok: true; result: ComputedFeedResult };
 export type ComputedFeedResponseError = { type: 'computed-feed'; ok: false; error: string };
-export type ProfileResponseOk = { type: 'profile'; ok: true; profile: ProfileViewDetailed };
+export type ProfileResponseOk = { type: 'profile'; ok: true; profile: ProfileViewDetailed; fetchedAt: number };
 export type ProfileResponseError = { type: 'profile'; ok: false; error: string };
 export type SearchResponseOk = { type: 'search'; ok: true; result: SearchResult };
 export type SearchResponseError = { type: 'search'; ok: false; error: string };
+export type ThreadResponseOk = { type: 'thread'; ok: true; result: ThreadResult };
+export type ThreadResponseError = { type: 'thread'; ok: false; error: string };
 export type SessionChangedEvent = { type: 'session:changed'; session?: SessionSnapshot; authenticated: boolean };
 
 export type BackgroundResponse =
@@ -41,6 +44,8 @@ export type BackgroundResponse =
 	| ProfileResponseError
 	| SearchResponseOk
 	| SearchResponseError
+	| ThreadResponseOk
+	| ThreadResponseError
 	| BackgroundError;
 
 export type RuntimeMessage = BackgroundResponse | SessionChangedEvent;
@@ -52,9 +57,12 @@ export const isBackgroundRequest = (input: unknown): input is BackgroundRequest 
 	const { type } = input as { type: string };
 	switch (type) {
 		case 'session:get':
-		case 'session:logout':
-		case 'profile:get': {
+		case 'session:logout': {
 			return true;
+		}
+		case 'profile:get': {
+			const req = (input as { request?: ProfileRequest }).request;
+			return !!req && typeof req === 'object';
 		}
 		case 'session:login': {
 			const req = input as { identifier?: unknown; password?: unknown };
@@ -71,6 +79,10 @@ export const isBackgroundRequest = (input: unknown): input is BackgroundRequest 
 		case 'search:posts': {
 			const req = (input as { request?: SearchRequest }).request;
 			return !!req && typeof req === 'object' && 'query' in req && typeof req.query === 'string';
+		}
+		case 'thread:get': {
+			const req = (input as { request?: ThreadRequest }).request;
+			return !!req && typeof req === 'object' && 'uri' in req && typeof req.uri === 'string';
 		}
 		default: {
 			return false;

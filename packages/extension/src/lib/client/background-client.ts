@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import type { FeedRequest } from '$lib/types/feed';
+import type { FeedRequest, ThreadRequest } from '$lib/types/feed';
 import type { ComputedFeedRequest } from '$lib/types/computed-feed';
 import type { SearchRequest } from '$lib/types/search';
 import type {
@@ -16,7 +16,9 @@ import type {
 	ProfileResponseOk,
 	ProfileResponseError,
 	SearchResponseOk,
-	SearchResponseError
+	SearchResponseError,
+	ThreadResponseOk,
+	ThreadResponseError
 } from '$lib/messaging/messages';
 
 type TSearchResult = SearchResponseOk | SearchResponseError;
@@ -24,6 +26,7 @@ type TLoginResult = LoginResponseOk | LoginResponseError;
 type TFeedResult = FeedResponseOk | FeedResponseError;
 type TComputedFeedResult = ComputedFeedResponseOk | ComputedFeedResponseError;
 type TProfileResult = ProfileResponseOk | ProfileResponseError;
+type TThreadResult = ThreadResponseOk | ThreadResponseError;
 
 export class BackgroundClient {
 	private readonly maxRetries = 5;
@@ -95,12 +98,16 @@ export class BackgroundClient {
 		return this.request<TComputedFeedResult>({ type: 'computed-feed:get', request });
 	}
 
-	async getProfile(actor?: string): Promise<TProfileResult> {
-		return this.request<TProfileResult>({ type: 'profile:get', actor });
+	async getProfile(actor?: string, forceRefresh?: boolean): Promise<TProfileResult> {
+		return this.request<TProfileResult>({ type: 'profile:get', request: { actor, forceRefresh } });
 	}
 
 	async searchPosts(request: SearchRequest): Promise<TSearchResult> {
 		return this.request<TSearchResult>({ type: 'search:posts', request });
+	}
+
+	async fetchThread(request: ThreadRequest): Promise<TThreadResult> {
+		return this.request<TThreadResult>({ type: 'thread:get', request });
 	}
 }
 

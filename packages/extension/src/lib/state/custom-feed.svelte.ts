@@ -1,23 +1,25 @@
 import { customFeedStorage } from '$lib/storage/custom-feed-storage';
 import type { CustomFeedDefinition } from '$lib/types/custom-feed';
+import type { ThreadStatus } from '$lib/types/feed';
 
 /**
- * Manages custom feed definitions using Svelte 5 runes.
+ * Manages custom feed definitions
  *
- * Provides reactive state management for user-created feed definitions,
- * coordinating with CustomFeedStorage for persistence. Handles CRUD
- * operations, loading states, and error handling.
+ * Provides reactive state management for user-created feed definitions, coordinating with CustomFeedStorage for persistence.
+ * Handles CRUD operations, loading states, and error handling.
  */
 class CustomFeedStore {
 	private static instance: CustomFeedStore;
 
 	private definitions = $state(new Map<string, CustomFeedDefinition>());
 	private selectedFeedId = $state<string>();
-	private status = $state<'idle' | 'loading' | 'error'>('idle');
+	private status = $state<ThreadStatus>('idle');
 	private errorMessage = $state<string>();
 	private hydrated = $state(false);
+
 	isLoading = $derived(this.status === 'loading');
-	selectedFeed: CustomFeedDefinition | undefined;
+	selectedFeed?: CustomFeedDefinition;
+
 	private constructor() {
 		this.selectedFeed = $derived.by(() => this.deriveSelectedFeed());
 	}

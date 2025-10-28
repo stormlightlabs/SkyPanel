@@ -5,7 +5,9 @@ import { GraphService } from '$lib/background/graph-service';
 import { FeedComputer } from '$lib/background/feed-computer';
 import { ProfileService } from '$lib/background/profile-service';
 import { SearchService } from '$lib/background/search-service';
+import { ThreadService } from '$lib/background/thread-service';
 import { computedFeedStorage } from '$lib/storage/computed-feed-storage';
+import { profileStorage } from '$lib/storage/profile-storage';
 import {
 	isBackgroundRequest,
 	type BackgroundRequest,
@@ -19,6 +21,7 @@ const graphs = new GraphService(sessions);
 const computer = new FeedComputer(sessions, graphs, feeds);
 const profiles = new ProfileService(sessions);
 const search = new SearchService(sessions);
+const threads = new ThreadService(sessions);
 
 type ChromiumSidePanelApi = {
 	open(options?: { windowId?: number }): Promise<void>;
@@ -49,6 +52,7 @@ async function handleRequest(request: BackgroundRequest): Promise<BackgroundResp
 		case 'session:logout': {
 			await sessions.logout();
 			await computedFeedStorage.clearAll();
+			await profileStorage.clearAll();
 			return { type: 'session:logout', ok: true };
 		}
 		case 'feed:get': {
@@ -103,8 +107,26 @@ async function handleRequest(request: BackgroundRequest): Promise<BackgroundResp
 		}
 		case 'profile:get': {
 			try {
-				const profile = await profiles.getProfile(request.actor);
-				return { type: 'profile', ok: true, profile };
+				const { request: profileRequest } = request;
+				const forceRefresh = profileRequest.forceRefresh ?? false;
+				const actor = profileRequest.actor ?? sessions.snapshot?.did;
+
+				if (!actor) {
+					return { type: 'profile', ok: false, error: 'No actor specified and no session available' };
+				}
+
+				if (!forceRefresh) {
+					const cached = await profileStorage.load(actor);
+					if (cached) {
+						return { type: 'profile', ok: true, profile: cached.profile, fetchedAt: cached.fetchedAt };
+					}
+				}
+
+				const profile = await profiles.getProfile(profileRequest.actor);
+				const cached = profileStorage.createCached(actor, profile);
+				await profileStorage.save(cached);
+
+				return { type: 'profile', ok: true, profile, fetchedAt: cached.fetchedAt };
 			} catch (error) {
 				console.error('[background] profile fetch failed', error);
 				return { type: 'profile', ok: false, error: error instanceof Error ? error.message : 'Unable to load profile' };
@@ -119,6 +141,16 @@ async function handleRequest(request: BackgroundRequest): Promise<BackgroundResp
 				return { type: 'search', ok: false, error: error instanceof Error ? error.message : 'Unable to search posts' };
 			}
 		}
+		case 'thread:get': {
+			try {
+				const { request: threadRequest } = request;
+				const result = await threads.fetchThread(threadRequest.uri, threadRequest.depth, threadRequest.parentHeight);
+				return { type: 'thread', ok: true, result };
+			} catch (error) {
+				console.error('[background] thread fetch failed', error);
+				return { type: 'thread', ok: false, error: error instanceof Error ? error.message : 'Unable to load thread' };
+			}
+		}
 		default: {
 			return { type: 'error', error: `Unsupported message ${(request as { type: string }).type}` };
 		}
@@ -126,9 +158,14 @@ async function handleRequest(request: BackgroundRequest): Promise<BackgroundResp
 }
 
 export default defineBackground(() => {
-	sessions.resumeFromStorage().catch((error) => {
-		console.warn('[background] failed to resume session', error);
-	});
+	sessions
+		.resumeFromStorage()
+		.then(() => {
+			profileStorage.clearAll();
+		})
+		.catch((error) => {
+			console.warn('[background] failed to resume session', error);
+		});
 
 	const sidePanel = (browser as typeof browser & { sidePanel?: ChromiumSidePanelApi }).sidePanel;
 	if (sidePanel) {

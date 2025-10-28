@@ -14,16 +14,10 @@
     - Grid layout option for multiple images (2x2 for 4 images, 2x1 for 2)
     - Carousel layout with prev/next navigation
 
-## Collapse Multiple Unread per Follower
-
-- Implement Threaded UI as default so replies are nested under parent posts
-
 ## My Profile
 
 - Implement edit profile functionality
 - Implement share profile functionality
-- Add profile refresh
-- Add profile caching
 
 ## Search
 

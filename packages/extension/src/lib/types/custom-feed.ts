@@ -1,12 +1,13 @@
 /**
  * Type definitions for custom/private feed configurations.
  *
- * Custom feeds are locally stored feed definitions that allow users to
- * create personalized feeds with specific sources, filters, and rules.
+ * Custom feeds are locally stored feed definitions that allow users to create personalized feeds with specific sources, filters, and rules.
+ *
  * These feeds are private by design and never published to remote services.
  */
 
 import type { AppBskyFeedDefs } from '@atproto/api';
+import type { ThreadStatus } from './feed';
 
 /**
  * Source types for custom feeds.
@@ -60,7 +61,7 @@ export type CustomFeedState = {
 	selectedFeedId?: string;
 	posts: Map<string, AppBskyFeedDefs.FeedViewPost>;
 	cursor?: string;
-	status: 'idle' | 'loading' | 'error';
+	status: ThreadStatus;
 	errorMessage?: string;
 };
 

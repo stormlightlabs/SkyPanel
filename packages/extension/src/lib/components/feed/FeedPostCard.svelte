@@ -2,6 +2,7 @@
   import { isExternalEmbed, isImagesEmbed, isVideoEmbed, type PostEmbed } from "$lib/types/embed";
   import { formatDistanceToNow } from "$lib/utils/time";
   import type { AppBskyActorDefs, AppBskyFeedDefs } from "@atproto/api";
+  import ThreadView from "../thread/ThreadView.svelte";
   import FeedImageEmbed from "./FeedImageEmbed.svelte";
   import FeedLinkCard from "./FeedLinkCard.svelte";
   import FeedVideoEmbed from "./FeedVideoEmbed.svelte";
@@ -18,9 +19,22 @@
   const isRepost = $derived(reason?.$type === "app.bsky.feed.defs#reasonRepost");
   const isTrending = $derived(reason?.$type === "app.bsky.feed.defs#reasonTrend");
   const reposter = $derived(isRepost ? reason?.by : undefined);
+
+  let showThread = $state(false);
+
+  const handleClick = () => {
+    showThread = true;
+  };
+
+  const closeThread = () => {
+    showThread = false;
+  };
 </script>
 
-<article class="rounded-xl border border-slate-800/40 bg-slate-900/80 p-4 shadow-lg shadow-slate-950/30">
+<button
+  type="button"
+  class="w-full cursor-pointer rounded-xl border border-slate-800/40 bg-slate-900/80 p-4 text-left shadow-lg shadow-slate-950/30 transition hover:border-slate-700/60 hover:bg-slate-900/90"
+  onclick={handleClick}>
   {#if isRepost && reposter}
     <p class="text-xs uppercase tracking-wide text-sky-300/80">
       Reposted by
@@ -94,4 +108,27 @@
     <span>🔁 {post?.repostCount ?? 0}</span>
     <span>❤️ {post?.likeCount ?? 0}</span>
   </footer>
-</article>
+</button>
+
+{#if showThread && post?.uri}
+  <div
+    class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 p-4 backdrop-blur-sm"
+    onclick={closeThread}
+    onkeydown={(e) => e.key === "Escape" && closeThread()}
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1">
+    <div class="my-8 w-full max-w-2xl" role="document">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-slate-100">Thread</h2>
+        <button
+          onclick={closeThread}
+          class="rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1 text-sm text-slate-300 transition hover:border-slate-600 hover:bg-slate-800"
+          type="button">
+          Close
+        </button>
+      </div>
+      <ThreadView uri={post.uri} />
+    </div>
+  </div>
+{/if}

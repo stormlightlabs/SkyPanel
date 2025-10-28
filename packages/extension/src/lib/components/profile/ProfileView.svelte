@@ -1,22 +1,16 @@
 <script lang="ts">
+  import FeedPostCard from "$lib/components/feed/FeedPostCard.svelte";
+  import { infiniteScroll } from "$lib/components/feed/infinite-scroll";
   import { feedStore } from "$lib/state/feed.svelte";
   import { profileStore } from "$lib/state/profile.svelte";
   import { sessionStore } from "$lib/state/session.svelte";
   import { onMount } from "svelte";
-  import FeedPostCard from "../feed/FeedPostCard.svelte";
-  import { infiniteScroll } from "../feed/infinite-scroll";
-
-  /**
-   * Profile view component displaying user profile metadata and posts.
-   *
-   * Shows avatar, banner, bio, follower/following counts, and the user's
-   * posts feed. Includes placeholder UI for edit and share actions.
-   * Automatically loads the current user's profile on mount.
-   */
 
   const profile = $derived(profileStore.currentProfile);
   const profileStatus = $derived(profileStore.currentStatus);
   const profileError = $derived(profileStore.error);
+  const isRefreshing = $derived(profileStore.isRefreshing);
+  const fetchedAt = $derived(profileStore.fetchedAt);
 
   const items = $derived(feedStore.currentItems);
   const loading = $derived(feedStore.currentLoading);
@@ -44,12 +38,44 @@
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
     return count.toString();
   }
+
+  function formatTimeSince(timestamp: number | undefined): string {
+    if (!timestamp) return "";
+    const now = Date.now();
+    const diffMs = now - timestamp;
+    const diffMin = Math.floor(diffMs / 60_000);
+
+    if (diffMin < 1) return "just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour}h ago`;
+
+    const diffDay = Math.floor(diffHour / 24);
+    return `${diffDay}d ago`;
+  }
+
+  const handleRefresh = async () => {
+    await profileStore.refresh();
+  };
+
+  /**
+   * Profile view component displaying user profile metadata and posts.
+   *
+   * Shows avatar, banner, bio, follower/following counts, and the user's posts feed.
+   * Includes placeholder UI for edit and share actions.
+   * Automatically loads the current user's profile on mount.
+   */
 </script>
 
 <div class="space-y-4">
   {#if profileStatus === "loading"}
     <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
       Loading profile…
+    </div>
+  {:else if profileStatus === "refreshing"}
+    <div class="rounded-xl border border-sky-800/40 bg-sky-900/20 p-6 text-center text-sm text-sky-300">
+      Refreshing profile…
     </div>
   {:else if profileError}
     <div class="rounded-lg border border-red-500/40 bg-red-950/40 px-4 py-3 text-xs text-red-200">
@@ -107,7 +133,7 @@
             </div>
           </div>
 
-          <div class="flex gap-2">
+          <div class="flex items-center gap-2">
             <button
               type="button"
               class="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2 text-xs font-medium text-slate-300 opacity-50"
@@ -122,6 +148,19 @@
               title="Coming soon">
               Share Profile
             </button>
+            <button
+              type="button"
+              class="rounded-lg border border-sky-700/50 bg-sky-900/30 px-4 py-2 text-xs font-medium text-sky-300 transition hover:border-sky-600 hover:bg-sky-900/50 disabled:cursor-not-allowed disabled:opacity-50"
+              onclick={handleRefresh}
+              disabled={isRefreshing}
+              title="Refresh profile">
+              {isRefreshing ? "Refreshing…" : "Refresh"}
+            </button>
+            {#if fetchedAt}
+              <span class="text-xs text-slate-500" title={new Date(fetchedAt).toLocaleString()}>
+                Updated {formatTimeSince(fetchedAt)}
+              </span>
+            {/if}
           </div>
         </div>
       </div>
