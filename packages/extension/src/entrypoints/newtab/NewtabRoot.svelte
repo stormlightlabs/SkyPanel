@@ -1,23 +1,24 @@
 <script lang="ts">
   import FeedSelector from "$lib/components/feed/FeedSelector.svelte";
   import AuthCard from "$lib/components/session/AuthCard.svelte";
-  import { resetComputedFeed } from "$lib/state/computed-feed.svelte";
-  import { resetFeed, selectFeed } from "$lib/state/feed.svelte";
-  import { hydrateSession, isAuthenticated, sessionHydrated } from "$lib/state/session.svelte";
+  import { computedFeedStore } from "$lib/state/computed-feed.svelte";
+  import { feedStore } from "$lib/state/feed.svelte";
+  import { sessionStore } from "$lib/state/session.svelte";
   import { onMount, untrack } from "svelte";
 
   let bootstrapped = $state(false);
-  const authenticated = $derived.by(isAuthenticated);
+  const authenticated = $derived(sessionStore.isAuthenticated);
+  const hydrated = $derived(sessionStore.isHydrated);
 
   onMount(() => {
-    hydrateSession();
+    sessionStore.hydrate();
   });
 
   $effect(() => {
     if (authenticated && !bootstrapped) {
       untrack(() => {
         bootstrapped = true;
-        selectFeed({ kind: "timeline" });
+        feedStore.select({ kind: "timeline" });
       });
     }
   });
@@ -27,8 +28,8 @@
       untrack(() => {
         bootstrapped = false;
       });
-      resetFeed();
-      resetComputedFeed();
+      feedStore.reset();
+      computedFeedStore.reset();
     }
   });
 </script>
@@ -50,11 +51,11 @@
 
     <div class="grid gap-6 lg:grid-cols-[1fr_minmax(400px,480px)]">
       <main class="space-y-6">
-        {#if sessionHydrated && authenticated}
+        {#if hydrated && authenticated}
           <FeedSelector />
         {:else}
           <div class="rounded-xl border border-slate-800/50 bg-slate-900/60 p-8 text-center text-sm text-slate-400">
-            {#if !sessionHydrated}
+            {#if !hydrated}
               Checking for saved session…
             {:else}
               Sign in to load your feeds.
@@ -66,7 +67,7 @@
       <aside class="space-y-6">
         <AuthCard />
 
-        {#if sessionHydrated && authenticated}
+        {#if hydrated && authenticated}
           <section class="rounded-xl border border-slate-800/50 bg-slate-900/70 p-6 shadow-lg shadow-slate-950/40">
             <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Compose</h2>
             <p class="mt-3 text-xs text-slate-400">Compose and publish posts directly from SkyPanel.</p>

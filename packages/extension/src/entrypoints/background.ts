@@ -24,11 +24,15 @@ type ChromiumSidePanelApi = {
 async function handleRequest(request: BackgroundRequest): Promise<BackgroundResponse> {
   switch (request.type) {
     case "session:get": {
-      return { type: "session", session: sessions.snapshot, authenticated: sessions.authenticated };
+      const response = { type: "session" as const, session: sessions.snapshot, authenticated: sessions.authenticated };
+      console.log("[background] session:get response:", { hasSession: !!sessions.snapshot, authenticated: sessions.authenticated });
+      return response;
     }
     case "session:login": {
       try {
+        console.log("[background] login attempt for:", request.identifier);
         const session = await sessions.login(request.identifier, request.password);
+        console.log("[background] login succeeded:", { did: session.did, handle: session.handle });
         return { type: "session:login", ok: true, session };
       } catch (error) {
         console.error("[background] login failed", error);
@@ -124,10 +128,27 @@ export default defineBackground(() => {
     );
   });
 
-  browser.runtime.onMessage.addListener((message) => {
-    if (!isBackgroundRequest(message)) {
-      return undefined;
+  browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    console.log("[background] received message:", message);
+    const isValid = isBackgroundRequest(message);
+    console.log("[background] isBackgroundRequest:", isValid);
+
+    if (!isValid) {
+      console.log("[background] ignoring non-background message");
+      return false;
     }
-    return handleRequest(message);
+
+    console.log("[background] handling request:", message.type);
+    handleRequest(message)
+      .then((response) => {
+        console.log("[background] sending response:", response);
+        sendResponse(response);
+      })
+      .catch((error) => {
+        console.error("[background] request handler error:", error);
+        sendResponse({ type: "error", error: error instanceof Error ? error.message : "Unknown error" });
+      });
+
+    return true; // Required for async response in MV3
   });
 });

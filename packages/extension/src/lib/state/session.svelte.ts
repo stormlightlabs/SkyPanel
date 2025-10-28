@@ -1,104 +1,157 @@
 import { browser } from "wxt/browser";
 import { backgroundClient } from "$lib/client/background-client";
-import { isSessionChangedEvent, type SessionChangedEvent } from "$lib/messaging/messages";
+import { isSessionChangedEvent } from "$lib/messaging/messages";
 import type { SessionSnapshot } from "$lib/types/session";
 
-let session = $state<SessionSnapshot>();
-let status = $state<"idle" | "loading" | "error">("idle");
-let errorMessage = $state<string>();
-let hydrated = $state(false);
-let hydratePromise: Promise<void> | null = null;
+/**
+ * Manages session state for the extension UI.
+ *
+ * Provides reactive state management for authentication, coordinating between
+ * the UI and background script via BackgroundClient. Handles session hydration,
+ * login, logout, and automatic updates from background session changes.
+ */
+class SessionStore {
+  private static instance: SessionStore;
 
-export const isAuthenticated = () => !!session;
-export const sessionStore = session;
-export const sessionStatus = status;
-export const sessionError = errorMessage;
-export const sessionHydrated = hydrated;
+  private session = $state<SessionSnapshot>();
+  private status = $state<"idle" | "loading" | "error">("idle");
+  private errorMessage = $state<string>();
+  private hydrated = $state(false);
+  private hydratePromise = $state<Promise<void>>();
 
-browser.runtime.onMessage.addListener((message: unknown) => {
-  if (!isSessionChangedEvent(message)) {
-    return;
-  }
-  const event = message as SessionChangedEvent;
-  session = event.session ?? undefined;
-  errorMessage = undefined;
-  status = "idle";
-});
-
-export async function hydrateSession(): Promise<void> {
-  if (hydratePromise) {
-    return hydratePromise;
+  private constructor() {
+    browser.runtime.onMessage.addListener(this.handleSessionChanged);
   }
 
-  if (hydrated) {
-    return;
-  }
-
-  status = "loading";
-  hydratePromise = (async () => {
-    try {
-      const response = await backgroundClient.getSession();
-      session = response.session ?? undefined;
-      errorMessage = undefined;
-      status = "idle";
-    } catch (error) {
-      console.error("[session-store] hydrate failed", error);
-      errorMessage = error instanceof Error ? error.message : "Unable to load session";
-      status = "error";
-    } finally {
-      hydrated = true;
-      hydratePromise = null;
+  static getInstance(): SessionStore {
+    if (!SessionStore.instance) {
+      SessionStore.instance = new SessionStore();
     }
-  })();
+    return SessionStore.instance;
+  }
 
-  await hydratePromise;
-}
+  get currentSession() {
+    return this.session;
+  }
 
-export async function login(identifier: string, password: string): Promise<boolean> {
-  status = "loading";
-  errorMessage = undefined;
-  try {
-    const response = await backgroundClient.login(identifier, password);
-    if (!response.ok) {
-      errorMessage = response.error;
-      status = "idle";
+  get currentStatus() {
+    return this.status;
+  }
+
+  get error() {
+    return this.errorMessage;
+  }
+
+  get isHydrated() {
+    return this.hydrated;
+  }
+
+  get isAuthenticated() {
+    return !!this.session;
+  }
+
+  private handleSessionChanged = (message: unknown) => {
+    if (!isSessionChangedEvent(message)) {
+      return;
+    }
+    console.log("[session-store] session changed event:", message);
+    this.session = message.session ?? undefined;
+    this.errorMessage = undefined;
+    this.status = "idle";
+  };
+
+  async hydrate(): Promise<void> {
+    console.log("[session-store] hydrate called, hydrated:", this.hydrated, "hydratePromise:", !!this.hydratePromise);
+
+    if (this.hydratePromise) {
+      console.log("[session-store] returning existing hydrate promise");
+      return this.hydratePromise;
+    }
+
+    if (this.hydrated) {
+      console.log("[session-store] already hydrated, skipping");
+      return;
+    }
+
+    console.log("[session-store] starting hydration");
+    this.status = "loading";
+    this.hydratePromise = (async () => {
+      try {
+        console.log("[session-store] fetching session from background");
+        const response = await backgroundClient.getSession();
+        console.log("[session-store] received response:", response);
+        this.session = response.session ?? undefined;
+        this.errorMessage = undefined;
+        this.status = "idle";
+        console.log("[session-store] hydration complete, session:", !!this.session);
+      } catch (error) {
+        console.error("[session-store] hydrate failed", error);
+        this.errorMessage = error instanceof Error ? error.message : "Unable to load session";
+        this.status = "error";
+      } finally {
+        console.log("[session-store] setting hydrated = true");
+        this.hydrated = true;
+        this.hydratePromise = undefined;
+      }
+    })();
+
+    await this.hydratePromise;
+    console.log("[session-store] hydrate finished");
+  }
+
+  async login(identifier: string, password: string): Promise<boolean> {
+    console.log("[session-store] login called with identifier:", identifier);
+    this.status = "loading";
+    this.errorMessage = undefined;
+    try {
+      console.log("[session-store] calling backgroundClient.login");
+      const response = await backgroundClient.login(identifier, password);
+      console.log("[session-store] login response:", response);
+      if (!response.ok) {
+        console.error("[session-store] login failed:", response.error);
+        this.errorMessage = response.error;
+        this.status = "idle";
+        return false;
+      }
+      console.log("[session-store] login succeeded, setting session");
+      this.session = response.session;
+      this.status = "idle";
+      return true;
+    } catch (error) {
+      console.error("[session-store] login exception:", error);
+      this.errorMessage = error instanceof Error ? error.message : "Unable to login";
+      this.status = "idle";
       return false;
     }
-    session = response.session;
-    status = "idle";
-    return true;
-  } catch (error) {
-    console.error("[session-store] login failed", error);
-    errorMessage = error instanceof Error ? error.message : "Unable to login";
-    status = "idle";
-    return false;
+  }
+
+  async logout(): Promise<void> {
+    this.status = "loading";
+    this.errorMessage = undefined;
+    try {
+      await backgroundClient.logout();
+      this.session = undefined;
+    } catch (error) {
+      console.error("[session-store] logout failed", error);
+      this.errorMessage = error instanceof Error ? error.message : "Unable to logout";
+    } finally {
+      this.status = "idle";
+    }
+  }
+
+  async refresh(): Promise<void> {
+    this.status = "loading";
+    try {
+      const response = await backgroundClient.getSession();
+      this.session = response.session ?? undefined;
+      this.errorMessage = undefined;
+      this.status = "idle";
+    } catch (error) {
+      console.error("[session-store] refresh failed", error);
+      this.errorMessage = error instanceof Error ? error.message : "Unable to refresh session";
+      this.status = "error";
+    }
   }
 }
 
-export async function logout(): Promise<void> {
-  status = "loading";
-  errorMessage = undefined;
-  try {
-    await backgroundClient.logout();
-    session = undefined;
-  } catch (error) {
-    console.error("[session-store] logout failed", error);
-    errorMessage = error instanceof Error ? error.message : "Unable to logout";
-  } finally {
-    status = "idle";
-  }
-}
-
-export async function refreshSession(): Promise<void> {
-  status = "loading";
-  try {
-    const response = await backgroundClient.getSession();
-    session = response.session ?? undefined;
-    errorMessage = undefined;
-    status = "idle";
-  } catch (error) {
-    console.error("[session-store] refresh failed", error);
-    errorMessage = error instanceof Error ? error.message : "Unable to refresh session";
-    status = "error";
-  }
-}
+export const sessionStore = SessionStore.getInstance();

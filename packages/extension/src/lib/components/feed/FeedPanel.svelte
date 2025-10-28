@@ -1,14 +1,5 @@
 <script lang="ts">
-  import {
-    currentFeed,
-    feedError,
-    feedItems,
-    feedLoading,
-    getFeedHasMore,
-    loadMore,
-    reloadActiveFeed,
-    selectFeed,
-  } from "$lib/state/feed.svelte";
+  import { feedStore } from "$lib/state/feed.svelte";
   import type { FeedKind } from "$lib/types/feed";
   import FeedPostCard from "./FeedPostCard.svelte";
   import { infiniteScroll } from "./infinite-scroll";
@@ -20,10 +11,14 @@
 
   const authorInputId = "feed-author";
   const listInputId = "feed-list";
-  const feedHasMore = $derived.by(getFeedHasMore);
+
+  const items = $derived(feedStore.currentItems);
+  const loading = $derived(feedStore.currentLoading);
+  const error = $derived(feedStore.error);
+  const hasMore = $derived(feedStore.hasMore);
+  const current = $derived(feedStore.currentFeed);
 
   $effect(() => {
-    const current = currentFeed;
     if (current.kind === "author" && current.actor) {
       authorHandle = current.actor;
     } else if (current.kind === "list" && current.list) {
@@ -38,11 +33,11 @@
     if (disabled) return;
 
     if (kind === "timeline") {
-      selectFeed({ kind: "timeline" });
+      feedStore.select({ kind: "timeline" });
     } else if (kind === "author" && authorHandle.trim()) {
-      selectFeed({ kind: "author", actor: authorHandle.trim() });
+      feedStore.select({ kind: "author", actor: authorHandle.trim() });
     } else if (kind === "list" && listUri.trim()) {
-      selectFeed({ kind: "list", list: listUri.trim() });
+      feedStore.select({ kind: "list", list: listUri.trim() });
     }
   };
 
@@ -50,19 +45,19 @@
     if (disabled) return;
     const value = limitInput(authorHandle);
     if (!value) return;
-    selectFeed({ kind: "author", actor: value });
+    feedStore.select({ kind: "author", actor: value });
   };
 
   const submitList = () => {
     if (disabled) return;
     const value = limitInput(listUri);
     if (!value) return;
-    selectFeed({ kind: "list", list: value });
+    feedStore.select({ kind: "list", list: value });
   };
 
   const tryLoadMore = () => {
-    if (disabled || !feedHasMore || feedLoading !== "idle") return;
-    loadMore();
+    if (disabled || !hasMore || loading !== "idle") return;
+    feedStore.loadMore();
   };
 </script>
 
@@ -88,9 +83,9 @@
 
       <button
         class="rounded-full border border-slate-800 bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-slate-700 hover:text-sky-200 disabled:cursor-not-allowed disabled:opacity-60"
-        onclick={() => reloadActiveFeed()}
-        disabled={feedLoading !== "idle" || disabled}>
-        {feedLoading !== "idle" ? "…" : "Refresh"}
+        onclick={() => feedStore.reload()}
+        disabled={loading !== "idle" || disabled}>
+        {loading !== "idle" ? "…" : "Refresh"}
       </button>
     </header>
 
@@ -149,35 +144,35 @@
     {/if}
   </section>
 
-  {#if feedError}
+  {#if error}
     <div class="rounded-lg border border-red-500/40 bg-red-950/40 px-4 py-3 text-xs text-red-200">
-      {feedError}
+      {error}
     </div>
   {/if}
 
   <section class="space-y-3">
-    {#if !feedItems.length && feedLoading !== "idle"}
+    {#if !items.size && loading !== "idle"}
       <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
         Loading feed…
       </div>
-    {:else if !feedItems.length}
+    {:else if !items.size}
       <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
         Select a feed source to get started.
       </div>
     {:else}
-      {#each feedItems as item (item.post?.cid ?? item.post?.uri ?? Math.random())}
+      {#each items.values() as item (item.post.cid)}
         <FeedPostCard {item} />
       {/each}
     {/if}
 
-    {#if feedHasMore}
+    {#if hasMore}
       <div use:infiniteScroll={{ onIntersect: tryLoadMore }} class="h-6 w-full"></div>
 
       <button
         class="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-semibold uppercase tracking-wide text-slate-200 transition hover:border-slate-700 hover:text-sky-200 disabled:cursor-not-allowed disabled:opacity-60"
-        onclick={loadMore}
-        disabled={feedLoading !== "idle" || disabled}>
-        {feedLoading === "next" ? "Loading…" : "Load more"}
+        onclick={() => feedStore.loadMore()}
+        disabled={loading !== "idle" || disabled}>
+        {loading === "next" ? "Loading…" : "Load more"}
       </button>
     {/if}
   </section>

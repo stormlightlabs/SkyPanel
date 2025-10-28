@@ -1,80 +1,121 @@
 import type { AppBskyFeedDefs } from "@atproto/api";
-import { backgroundClient } from "$lib/client/background-client";
+import { backgroundClient, type BackgroundClient } from "$lib/client/background-client";
 import type { FeedRequest } from "$lib/types/feed";
+import { SvelteMap } from "svelte/reactivity";
 
 type LoadingState = "idle" | "initial" | "next";
 
-let items = $state<AppBskyFeedDefs.FeedViewPost[]>([]);
-let activeRequest = $state<FeedRequest>({ kind: "timeline" });
-let cursor = $state<string | null>(null);
-let loading = $state<LoadingState>("idle");
-let errorMessage = $state<string | null>(null);
-let inflight = false;
+/**
+ * Manages feed state for the extension UI.
+ *
+ * Handles loading, pagination, and caching of feed posts from various sources (timeline, author feeds, list feeds).
+ * Coordinates with {@link BackgroundClient} to fetch feed data and manages loading states and error handling.
+ * Uses a Map internally to deduplicate posts by CID while preserving insertion order.
+ */
+class FeedStore {
+  private static instance: FeedStore;
 
-export const feedItems = items;
-export const feedCursor = cursor;
-export const feedLoading = loading;
-export const feedError = errorMessage;
-export const currentFeed = activeRequest;
-export const getFeedEmpty = () => loading === "idle" && items.length === 0;
-export const getFeedHasMore = () => typeof cursor === "string" && cursor.length > 0;
+  private itemsMap = $state(new SvelteMap<string, AppBskyFeedDefs.FeedViewPost>());
+  private activeRequest = $state<FeedRequest>({ kind: "timeline" });
+  private cursor = $state<string>();
+  private loading = $state<LoadingState>("idle");
+  private errorMessage = $state<string>();
+  private inflight = false;
+  isEmpty = $derived(this.loading === "idle" && this.itemsMap.size === 0);
+  hasMore = $derived(typeof this.cursor === "string" && this.cursor.length > 0);
+  private constructor() {}
 
-export async function selectFeed(request: FeedRequest): Promise<void> {
-  activeRequest = request;
-  await fetchFeed({ request, mode: "replace" });
-}
-
-export async function reloadActiveFeed(): Promise<void> {
-  await fetchFeed({ request: activeRequest, mode: "replace" });
-}
-
-export async function loadMore(): Promise<void> {
-  const nextCursor = cursor;
-  if (!nextCursor || inflight) {
-    return;
-  }
-  await fetchFeed({ request: { ...activeRequest, cursor: nextCursor }, mode: "append" });
-}
-
-export function resetFeed(): void {
-  items = [];
-  cursor = null;
-  errorMessage = null;
-  loading = "idle";
-}
-
-async function fetchFeed({ request, mode }: { request: FeedRequest; mode: "replace" | "append" }): Promise<void> {
-  if (inflight) {
-    return;
+  static getInstance(): FeedStore {
+    if (!FeedStore.instance) {
+      FeedStore.instance = new FeedStore();
+    }
+    return FeedStore.instance;
   }
 
-  inflight = true;
-  loading = mode === "replace" ? "initial" : "next";
-  errorMessage = null;
+  get currentItems() {
+    return this.itemsMap;
+  }
 
-  try {
-    const response = await backgroundClient.fetchFeed(request);
-    if (!response.ok) {
-      errorMessage = response.error;
+  get currentCursor() {
+    return this.cursor;
+  }
+
+  get currentLoading() {
+    return this.loading;
+  }
+
+  get error() {
+    return this.errorMessage;
+  }
+
+  get currentFeed() {
+    return this.activeRequest;
+  }
+
+  async select(request: FeedRequest): Promise<void> {
+    this.activeRequest = request;
+    await this.fetch({ request, mode: "replace" });
+  }
+
+  async reload(): Promise<void> {
+    await this.fetch({ request: this.activeRequest, mode: "replace" });
+  }
+
+  async loadMore(): Promise<void> {
+    const nextCursor = this.cursor;
+    if (!nextCursor || this.inflight) {
+      return;
+    }
+    await this.fetch({ request: { ...this.activeRequest, cursor: nextCursor }, mode: "append" });
+  }
+
+  reset(): void {
+    this.itemsMap.clear();
+    this.cursor = undefined;
+    this.errorMessage = undefined;
+    this.loading = "idle";
+  }
+
+  private async fetch({ request, mode }: { request: FeedRequest; mode: "replace" | "append" }): Promise<void> {
+    if (this.inflight) {
       return;
     }
 
-    const { result } = response;
-    cursor = result.cursor ?? null;
+    this.inflight = true;
+    this.loading = mode === "replace" ? "initial" : "next";
+    this.errorMessage = undefined;
 
-    if (mode === "replace") {
-      items = result.feed;
-    } else {
-      items = [...items, ...result.feed];
+    try {
+      const response = await backgroundClient.fetchFeed(request);
+      if (!response.ok) {
+        this.errorMessage = response.error;
+        return;
+      }
+
+      const { result } = response;
+      this.cursor = result.cursor;
+
+      if (mode === "replace") {
+        this.itemsMap.clear();
+        for (const item of result.feed) {
+          this.itemsMap.set(item.post.cid, item);
+        }
+      } else {
+        for (const item of result.feed) {
+          this.itemsMap.set(item.post.cid, item);
+        }
+      }
+
+      const { cursor: _ignoredCursor, ...rest } = request;
+      this.activeRequest = rest as FeedRequest;
+    } catch (error) {
+      console.error("[feed-store] fetch failed", error);
+      this.errorMessage = error instanceof Error ? error.message : "Unable to load feed";
+    } finally {
+      this.inflight = false;
+      this.loading = "idle";
     }
-
-    const { cursor: _ignoredCursor, ...rest } = request;
-    activeRequest = rest as FeedRequest;
-  } catch (error) {
-    console.error("[feed-store] fetch failed", error);
-    errorMessage = error instanceof Error ? error.message : "Unable to load feed";
-  } finally {
-    inflight = false;
-    loading = "idle";
   }
 }
+
+export const feedStore = FeedStore.getInstance();

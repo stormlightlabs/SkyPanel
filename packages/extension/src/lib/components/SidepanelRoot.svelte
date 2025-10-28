@@ -1,22 +1,24 @@
 <script lang="ts">
-  import { resetComputedFeed } from "$lib/state/computed-feed.svelte";
-  import { resetFeed, selectFeed } from "$lib/state/feed.svelte";
-  import { hydrateSession, isAuthenticated, sessionHydrated } from "$lib/state/session.svelte";
+  import { computedFeedStore } from "$lib/state/computed-feed.svelte";
+  import { feedStore } from "$lib/state/feed.svelte";
+  import { sessionStore } from "$lib/state/session.svelte";
   import { onMount, untrack } from "svelte";
   import FeedSelector from "./feed/FeedSelector.svelte";
   import AuthCard from "./session/AuthCard.svelte";
 
   let bootstrapped = $state(false);
-  const authenticated = $derived.by(isAuthenticated);
+  const authenticated = $derived(sessionStore.isAuthenticated);
+  const hydrated = $derived(sessionStore.isHydrated);
+
   onMount(() => {
-    hydrateSession();
+    sessionStore.hydrate();
   });
 
   $effect(() => {
     if (authenticated && !bootstrapped) {
       untrack(() => {
         bootstrapped = true;
-        selectFeed({ kind: "timeline" });
+        feedStore.select({ kind: "timeline" });
       });
     }
   });
@@ -26,8 +28,8 @@
       untrack(() => {
         bootstrapped = false;
       });
-      resetFeed();
-      resetComputedFeed();
+      feedStore.reset();
+      computedFeedStore.reset();
     }
   });
 </script>
@@ -49,11 +51,11 @@
 
     <AuthCard />
 
-    {#if sessionHydrated && authenticated}
+    {#if hydrated && authenticated}
       <FeedSelector />
     {:else}
       <div class="rounded-xl border border-slate-800/50 bg-slate-900/60 p-6 text-sm text-slate-400">
-        {#if !sessionHydrated}
+        {#if !hydrated}
           Checking for saved session…
         {:else}
           Sign in above to load your feeds.

@@ -1,39 +1,36 @@
 <script lang="ts">
-  import {
-    computedFeedComputedAt,
-    computedFeedError,
-    computedFeedItems,
-    computedFeedLoading,
-    computedFeedMutuals,
-    computedFeedQuietPosters,
-    currentComputedFeed,
-    getIsComputing,
-    refreshActiveComputedFeed,
-    selectComputedFeed,
-  } from "$lib/state/computed-feed.svelte";
+  import { computedFeedStore } from "$lib/state/computed-feed.svelte";
   import type { ComputedFeedKind } from "$lib/types/computed-feed";
   import { formatDistanceToNow } from "$lib/utils/time";
   import FeedPostCard from "./FeedPostCard.svelte";
 
   let { disabled = false } = $props();
   let selectedKind = $state<ComputedFeedKind>();
-  const isComputing = $derived.by(getIsComputing);
+
+  const items = $derived(computedFeedStore.currentItems);
+  const loading = $derived(computedFeedStore.currentLoading);
+  const error = $derived(computedFeedStore.error);
+  const mutuals = $derived(computedFeedStore.currentMutuals);
+  const quietPosters = $derived(computedFeedStore.currentQuietPosters);
+  const computedAt = $derived(computedFeedStore.currentComputedAt);
+  const current = $derived(computedFeedStore.currentFeed);
+  const isComputing = $derived(computedFeedStore.isComputing);
 
   $effect(() => {
-    if (currentComputedFeed) {
-      selectedKind = currentComputedFeed.kind;
+    if (current) {
+      selectedKind = current.kind;
     }
   });
 
   const selectKind = (kind: ComputedFeedKind) => {
     if (disabled) return;
     selectedKind = kind;
-    selectComputedFeed({ kind });
+    computedFeedStore.select({ kind });
   };
 
   const refresh = () => {
     if (disabled || !selectedKind) return;
-    refreshActiveComputedFeed();
+    computedFeedStore.refresh();
   };
 
   const formatComputedAt = (timestamp?: number) => {
@@ -81,10 +78,10 @@
           Shows posts from accounts where you follow each other. This feed is computed from your social graph and cached
           for 30 minutes.
         </p>
-        {#if computedFeedMutuals.length > 0}
+        {#if mutuals.length > 0}
           <p class="text-xs text-slate-500">
-            Found {computedFeedMutuals.length} mutual{computedFeedMutuals.length === 1 ? "" : "s"}. Last computed:{" "}
-            {formatComputedAt(computedFeedComputedAt)}.
+            Found {mutuals.length} mutual{mutuals.length === 1 ? "" : "s"}. Last computed:{" "}
+            {formatComputedAt(computedAt)}.
           </p>
         {/if}
       </div>
@@ -94,10 +91,11 @@
           Shows posts from accounts that post infrequently (less than 1 post/day). Helps you avoid missing sparse
           posters. This feed is computed from post rates and cached for 2 hours.
         </p>
-        {#if computedFeedQuietPosters.length > 0}
+        {#if quietPosters.length > 0}
           <p class="text-xs text-slate-500">
-            Found {computedFeedQuietPosters.length} quiet poster{computedFeedQuietPosters.length === 1 ? "" : "s"}. Last
-            computed: {formatComputedAt(computedFeedComputedAt)}.
+            Found {quietPosters.length} quiet poster{quietPosters.length === 1 ? "" : "s"}. Last computed: {formatComputedAt(
+              computedAt,
+            )}.
           </p>
         {/if}
       </div>
@@ -108,24 +106,24 @@
     {/if}
   </section>
 
-  {#if computedFeedError}
+  {#if error}
     <div class="rounded-lg border border-red-500/40 bg-red-950/40 px-4 py-3 text-xs text-red-200">
-      {computedFeedError}
+      {error}
     </div>
   {/if}
 
   <section class="space-y-3">
-    {#if !computedFeedItems.length && isComputing}
+    {#if !items.length && isComputing}
       <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
-        {computedFeedLoading === "computing" ? "Computing feed…" : "Refreshing feed…"}
+        {loading === "computing" ? "Computing feed…" : "Refreshing feed…"}
         <p class="mt-2 text-xs text-slate-500">This may take a moment for accounts with large follow lists.</p>
       </div>
-    {:else if !computedFeedItems.length}
+    {:else if !items.length}
       <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
         {selectedKind ? "No posts found in this feed." : "Select a default feed to get started."}
       </div>
     {:else}
-      {#each computedFeedItems as item (item.post?.cid ?? item.post?.uri ?? Math.random())}
+      {#each items as item (item.post.cid ?? item.post.uri)}
         <FeedPostCard {item} />
       {/each}
     {/if}

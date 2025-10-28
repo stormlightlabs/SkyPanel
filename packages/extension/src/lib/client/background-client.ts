@@ -14,7 +14,7 @@ import type {
   ComputedFeedResponseError,
 } from "$lib/messaging/messages";
 
-class BackgroundClient {
+export class BackgroundClient {
   private readonly maxRetries = 5;
   private readonly initialDelayMs = 50;
 
@@ -25,9 +25,8 @@ class BackgroundClient {
   /**
    * Send a message to the background script with exponential backoff retry logic.
    *
-   * This handles the race condition where the sidepanel loads before the background
-   * script's message listener is fully registered. The background service worker may
-   * not be ready immediately when the extension starts or when the sidepanel opens.
+   * This handles the race condition where the sidepanel loads before the background script's message listener is fully registered.
+   * The background service worker may not be ready immediately when the extension starts or when the sidepanel opens.
    *
    * @param request The background request to send
    * @returns The response from the background script

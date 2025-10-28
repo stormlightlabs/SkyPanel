@@ -1,13 +1,5 @@
 <script lang="ts">
-  import {
-    hydrateSession,
-    isAuthenticated,
-    login,
-    logout,
-    sessionError,
-    sessionStatus,
-    sessionStore,
-  } from "$lib/state/session.svelte";
+  import { sessionStore } from "$lib/state/session.svelte";
   import { onMount } from "svelte";
 
   let identifier = $state("");
@@ -15,15 +7,18 @@
   let showPassword = $state(false);
   const handleId = $state("auth-handle");
   const passwordId = $state("auth-password");
-  const authenticated = $derived.by(isAuthenticated);
+  const authenticated = $derived(sessionStore.isAuthenticated);
+  const status = $derived(sessionStore.currentStatus);
+  const error = $derived(sessionStore.error);
+  const session = $derived(sessionStore.currentSession);
 
   onMount(() => {
-    hydrateSession();
+    sessionStore.hydrate();
   });
 
   const submit = async () => {
     if (!identifier || !password) return;
-    await login(identifier.trim(), password);
+    await sessionStore.login(identifier.trim(), password);
     password = "";
   };
 </script>
@@ -34,17 +29,17 @@
     <div class="flex items-start gap-3">
       <div class="flex-1">
         <p class="text-xs uppercase tracking-[0.22em] text-slate-400">Signed in</p>
-        <p class="mt-1 text-lg font-semibold text-sky-200">@{sessionStore?.handle}</p>
+        <p class="mt-1 text-lg font-semibold text-sky-200">@{session?.handle}</p>
         <p class="mt-1 text-slate-400">Session backed by your Bluesky app password.</p>
       </div>
       <button
         class="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-slate-600 hover:text-sky-200"
         onclick={(e) => {
           e.preventDefault();
-          logout();
+          sessionStore.logout();
         }}
-        disabled={sessionStatus === "loading"}>
-        {sessionStatus === "loading" ? "…" : "Sign out"}
+        disabled={status === "loading"}>
+        {status === "loading" ? "…" : "Sign out"}
       </button>
     </div>
   </div>
@@ -88,17 +83,17 @@
         </div>
       </div>
 
-      {#if sessionError}
+      {#if error}
         <p class="rounded-md border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-200">
-          {sessionError}
+          {error}
         </p>
       {/if}
 
       <button
         type="submit"
         class="w-full rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold uppercase tracking-wide text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={sessionStatus === "loading"}>
-        {sessionStatus === "loading" ? "Signing in…" : "Sign in"}
+        disabled={status === "loading"}>
+        {status === "loading" ? "Signing in…" : "Sign in"}
       </button>
 
       <p class="text-xs text-slate-400">

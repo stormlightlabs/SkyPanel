@@ -1,124 +1,143 @@
 import type { AppBskyFeedDefs } from "@atproto/api";
-import { backgroundClient } from "$lib/client/background-client";
-import type { ComputedFeedRequest, ComputedFeedResult, QuietPoster } from "$lib/types/computed-feed";
+import { backgroundClient, type BackgroundClient } from "$lib/client/background-client";
+import type { ComputedFeedRequest, QuietPoster } from "$lib/types/computed-feed";
 import type { Mutual } from "$lib/types/graph";
-
-/**
- * State management for computed feeds (Mutuals, Quiet Posters).
- *
- * Computed feeds are expensive to generate and are cached aggressively.
- * Each feed type has specific metadata (list of mutuals, quiet poster stats, etc.).
- */
 
 type LoadingState = "idle" | "computing" | "refreshing";
 
-let items = $state<AppBskyFeedDefs.FeedViewPost[]>([]);
-let activeRequest = $state<ComputedFeedRequest>();
-let loading = $state<LoadingState>("idle");
-let errorMessage = $state<string>();
-let mutuals = $state<Mutual[]>([]);
-let quietPosters = $state<QuietPoster[]>([]);
-let computedAt = $state<number>();
-let inflight = false;
-
-export const computedFeedItems = items;
-export const computedFeedLoading = loading;
-export const computedFeedError = errorMessage;
-export const currentComputedFeed = activeRequest;
-export const computedFeedMutuals = mutuals;
-export const computedFeedQuietPosters = quietPosters;
-export const computedFeedComputedAt = computedAt;
-
-export const getComputedFeedEmpty = () => loading === "idle" && items.length === 0;
-export const getIsComputing = () => loading === "computing" || loading === "refreshing";
-
 /**
- * Select and fetch a computed feed.
+ * Manages computed feed state for the extension UI.
  *
- * Uses cached result if available, unless forceRefresh is true.
- *
- * @param request - Computed feed request (mutuals or quiet)
+ * Handles loading and caching of expensive computed feeds (Mutuals, Quiet Posters).
+ * Each feed type includes specific metadata like mutual lists or quiet poster statistics.
+ * Coordinates with {@link BackgroundClient} to fetch computed data and manages loading states.
  */
-export async function selectComputedFeed(request: ComputedFeedRequest): Promise<void> {
-  activeRequest = request;
-  await fetchComputedFeed({ request, forceRefresh: false });
-}
+class ComputedFeedStore {
+  private static instance: ComputedFeedStore;
 
-/**
- * Refresh the currently active computed feed.
- *
- * Forces recomputation, bypassing cache.
- */
-export async function refreshActiveComputedFeed(): Promise<void> {
-  if (!activeRequest) {
-    return;
-  }
-  await fetchComputedFeed({ request: activeRequest, forceRefresh: true });
-}
+  private items = $state<AppBskyFeedDefs.FeedViewPost[]>([]);
+  private activeRequest = $state<ComputedFeedRequest>();
+  private loading = $state<LoadingState>("idle");
+  private errorMessage = $state<string>();
+  private mutuals = $state<Mutual[]>([]);
+  private quietPosters = $state<QuietPoster[]>([]);
+  private computedAt = $state<number>();
+  private inflight = false;
 
-/**
- * Reset computed feed state to initial values.
- */
-export function resetComputedFeed(): void {
-  items = [];
-  activeRequest = undefined;
-  errorMessage = undefined;
-  loading = "idle";
-  mutuals = [];
-  quietPosters = [];
-  computedAt = undefined;
-}
+  private constructor() {}
 
-/**
- * Fetch computed feed from background service.
- *
- * The background service handles caching and expensive computation.
- * This function just manages UI state.
- */
-async function fetchComputedFeed({
-  request,
-  forceRefresh,
-}: {
-  request: ComputedFeedRequest;
-  forceRefresh: boolean;
-}): Promise<void> {
-  if (inflight) {
-    return;
+  static getInstance(): ComputedFeedStore {
+    if (!ComputedFeedStore.instance) {
+      ComputedFeedStore.instance = new ComputedFeedStore();
+    }
+    return ComputedFeedStore.instance;
   }
 
-  inflight = true;
-  loading = forceRefresh ? "refreshing" : "computing";
-  errorMessage = undefined;
+  get currentItems() {
+    return this.items;
+  }
 
-  try {
-    const response = await backgroundClient.fetchComputedFeed({ ...request, forceRefresh });
+  get currentLoading() {
+    return this.loading;
+  }
 
-    if (!response.ok) {
-      errorMessage = response.error;
+  get error() {
+    return this.errorMessage;
+  }
+
+  get currentFeed() {
+    return this.activeRequest;
+  }
+
+  get currentMutuals() {
+    return this.mutuals;
+  }
+
+  get currentQuietPosters() {
+    return this.quietPosters;
+  }
+
+  get currentComputedAt() {
+    return this.computedAt;
+  }
+
+  get isEmpty() {
+    return this.loading === "idle" && this.items.length === 0;
+  }
+
+  get isComputing() {
+    return this.loading === "computing" || this.loading === "refreshing";
+  }
+
+  async select(request: ComputedFeedRequest): Promise<void> {
+    this.activeRequest = request;
+    await this.fetch({ request, forceRefresh: false });
+  }
+
+  async refresh(): Promise<void> {
+    if (!this.activeRequest) {
+      return;
+    }
+    await this.fetch({ request: this.activeRequest, forceRefresh: true });
+  }
+
+  reset(): void {
+    this.items = [];
+    this.activeRequest = undefined;
+    this.errorMessage = undefined;
+    this.loading = "idle";
+    this.mutuals = [];
+    this.quietPosters = [];
+    this.computedAt = undefined;
+  }
+
+  private async fetch({
+    request,
+    forceRefresh,
+  }: {
+    request: ComputedFeedRequest;
+    forceRefresh: boolean;
+  }): Promise<void> {
+    if (this.inflight) {
       return;
     }
 
-    const { result } = response;
-    items = result.feed;
-    computedAt = result.computedAt;
+    this.inflight = true;
+    this.loading = forceRefresh ? "refreshing" : "computing";
+    this.errorMessage = undefined;
 
-    switch (result.kind) {
-      case "mutuals":
-        mutuals = result.mutuals;
-        quietPosters = [];
-        break;
-      case "quiet":
-        quietPosters = result.quietPosters;
-        mutuals = [];
-        break;
+    try {
+      const response = await backgroundClient.fetchComputedFeed({ ...request, forceRefresh });
+
+      if (!response.ok) {
+        this.errorMessage = response.error;
+        return;
+      }
+
+      const { result } = response;
+      this.items = result.feed;
+      this.computedAt = result.computedAt;
+
+      switch (result.kind) {
+        case "mutuals":
+          this.mutuals = result.mutuals;
+          this.quietPosters = [];
+          break;
+        case "quiet":
+          this.quietPosters = result.quietPosters;
+          this.mutuals = [];
+          break;
+      }
+
+      this.activeRequest = { kind: result.kind, forceRefresh: false };
+    } catch (error) {
+      console.error("[computed-feed-store] fetch failed", error);
+      this.errorMessage = error instanceof Error ? error.message : "Unable to compute feed";
+    } finally {
+      this.inflight = false;
+      this.loading = "idle";
     }
-
-    activeRequest = { kind: result.kind, forceRefresh: false };
-  } catch (error) {
-    console.error("[computed-feed-store] fetch failed", error);
-    errorMessage = error instanceof Error ? error.message : "Unable to compute feed";
-  } finally {
-    inflight = false;
-    loading = "idle";
   }
 }
+
+export const computedFeedStore = ComputedFeedStore.getInstance();
