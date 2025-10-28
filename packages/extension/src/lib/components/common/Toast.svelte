@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { toastStore, ToastType } from "$lib/state/toast.svelte";
+  import { toastStore, type ToastType } from "$lib/state/toast.svelte";
 
   function getBgColor(kind: ToastType) {
     switch (kind) {
