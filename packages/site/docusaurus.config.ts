@@ -29,7 +29,7 @@ const config: Config = {
       title: "My Site",
       logo: { alt: "My Site Logo", src: "img/logo.svg" },
       items: [
-        { type: "docSidebar", sidebarId: "tutorialSidebar", position: "left", label: "Tutorial" },
+        { type: "docSidebar", sidebarId: "userManual", position: "left", label: "Usage" },
         { href: "https://github.com/stormlightlabs/skypanel", label: "GitHub", position: "right" },
       ],
     },

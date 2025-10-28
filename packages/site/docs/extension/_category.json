@@ -1,0 +1,9 @@
+{
+  "label": "Extension",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "title": "SkyPanel",
+    "description": "Documentation for the SkyPanel companion tool."
+  }
+}
