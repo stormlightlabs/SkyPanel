@@ -42,7 +42,8 @@ export default defineConfig(
 				{ cases: { pascalCase: true, kebabCase: true }, multipleFileExtensions: false }
 			],
 			'unicorn/no-null': 'off',
-			'unicorn/prevent-abbreviations': 'off'
+			'unicorn/prevent-abbreviations': 'off',
+			'unicorn/consistent-function-scoping': ['error', { checkArrowFunctions: false }]
 		}
 	},
 	{ rules: { 'unicorn/prefer-top-level-await': 'off' } }

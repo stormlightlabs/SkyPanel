@@ -16,10 +16,7 @@
 
 ## Collapse Multiple Unread per Follower
 
-- Track per-actor last seen timestamps in a feed context.
-    - Group consecutive unread posts by the same author into a collapsible block showing count + preview.
-- Mark-read semantics: collapse disappears when user expands or scrolls past.
-- Done?: Long runs from prolific authors collapse to a single row with accurate unread counts.
+- Implement Threaded UI as default so replies are nested under parent posts
 
 ## My Profile
 

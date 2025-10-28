@@ -1,18 +1,24 @@
 <script lang="ts">
   import { feedStore } from "$lib/state/feed.svelte";
+  import { readStateStore } from "$lib/state/read-state.svelte";
   import type { FeedKind } from "$lib/types/feed";
+  import { onMount } from "svelte";
+  import AuthorPostGroup from "./AuthorPostGroup.svelte";
   import FeedPostCard from "./FeedPostCard.svelte";
   import { infiniteScroll } from "./infinite-scroll";
+
+  // Initialize read state store on mount
+  onMount(() => {
+    readStateStore.init();
+  });
 
   let { disabled = false } = $props();
   let tab = $state<FeedKind>("timeline");
   let authorHandle = $state("");
   let listUri = $state("");
 
-  const authorInputId = "feed-author";
-  const listInputId = "feed-list";
-
-  const items = $derived(feedStore.currentItems);
+  const items = $derived(feedStore.groupedItems);
+  const itemCount = $derived(feedStore.currentItems.size);
   const loading = $derived(feedStore.currentLoading);
   const error = $derived(feedStore.error);
   const hasMore = $derived(feedStore.hasMore);
@@ -69,6 +75,8 @@
     feedStore.select({ kind: "list", list: value });
   };
 
+  const authorInputId = "feed-author";
+  const listInputId = "feed-list";
   const tryLoadMore = () => {
     if (disabled || !hasMore || loading !== "idle") return;
     feedStore.loadMore();
@@ -166,17 +174,21 @@
   {/if}
 
   <section class="space-y-3">
-    {#if items.size === 0 && loading !== "idle"}
+    {#if itemCount === 0 && loading !== "idle"}
       <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
         Loading feed…
       </div>
-    {:else if items.size === 0}
+    {:else if itemCount === 0}
       <div class="rounded-xl border border-slate-800/40 bg-slate-900/70 p-6 text-center text-sm text-slate-400">
         Select a feed source to get started.
       </div>
     {:else}
-      {#each items.values() as item (item.post.cid)}
-        <FeedPostCard {item} />
+      {#each items as item, index (item.type === "group" ? `group-${item.group.author.did}-${index}` : `single-${item.post.post.cid}`)}
+        {#if item.type === "group"}
+          <AuthorPostGroup group={item.group} />
+        {:else}
+          <FeedPostCard item={item.post} />
+        {/if}
       {/each}
     {/if}
 

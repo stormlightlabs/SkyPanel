@@ -2,6 +2,8 @@ import type { AppBskyFeedDefs } from '@atproto/api';
 import { backgroundClient } from '$lib/client/background-client';
 import type { FeedRequest } from '$lib/types/feed';
 import { SvelteMap } from 'svelte/reactivity';
+import { groupConsecutivePosts, type FeedItem } from '$lib/utils/post-grouping';
+import { readStateStore } from '$lib/state/read-state.svelte';
 
 type LoadingState = 'idle' | 'initial' | 'next';
 
@@ -23,6 +25,18 @@ class FeedStore {
 	private inflight = false;
 	isEmpty = $derived(this.loading === 'idle' && this.itemsMap.size === 0);
 	hasMore = $derived(typeof this.cursor === 'string' && this.cursor.length > 0);
+
+	/**
+	 * Grouped feed items with consecutive posts by the same author collapsed.
+	 *
+	 * Uses read state to determine which groups should be auto-collapsed.
+	 */
+	groupedItems = $derived.by<FeedItem[]>(() => {
+		const isUnreadFn = (authorDid: string, timestamp: string) => readStateStore.isUnread(authorDid, timestamp);
+		const posts = [...this.itemsMap.values()];
+		return groupConsecutivePosts(posts, isUnreadFn);
+	});
+
 	private constructor() {}
 
 	static getInstance(): FeedStore {
