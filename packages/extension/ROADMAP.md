@@ -1,12 +1,21 @@
-# ROADMAP - "SkyPanel"
+# ROADMAP - SkyPanel Extension
 
-## Private / Locally Stored Feeds
+Browser extension for Bluesky, distributed via Chrome Web Store and Firefox Add-ons.
 
-- Implement feed execution engine (fetch from sources, apply filters)
-- Add FeedBuilder UI for rich feed creation/editing
-- Support multiple sources per feed
-- Implement author, rate-based, label, and keyword filters
-- Add feed preview before saving
+**Note:** Extension works standalone. Server integration is optional for advanced features.
+
+## Server Integration (Optional)
+
+Users can optionally connect the extension to their self-hosted SkyPanel instance (see `/server/`):
+
+- Configure server URL in extension settings
+- Sync authentication between extension and server
+- Browse and subscribe to custom feed generators from server
+- Manage saved/pinned feeds via server API
+- Deep linking to web app routes
+- Quick access to server features via sidepanel
+
+**Without Server:** Extension still provides timeline, feeds, computed feeds, search, and social features using Bluesky API directly.
 
 ## Media
 

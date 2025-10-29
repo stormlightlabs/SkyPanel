@@ -46,9 +46,16 @@
 
 ## Feed definition management
 
-- Manage local feed definitions in CLI: `feed create`, `feed delete`, `export feed` (to remote generator), `import feed`.
-- Persist definitions in a local database or config (e.g., BoltDB or simple JSON file).
-- Done?: CLI can create, list, delete feed definitions.
+CLI commands for managing feeds on SkyFeed server (see `/server/ROADMAP.md`):
+
+- `skycli feed create` - Create new feed definition on server
+- `skycli feed list` - List user's feeds
+- `skycli feed edit` - Update feed definition
+- `skycli feed delete` - Delete feed
+- `skycli feed test` - Test feed algorithm locally with sample data
+- `skycli feed export/import` - Share feed definitions as JSON
+
+Done?: CLI can create, list, edit, delete, and test feed definitions via server API.
 
 ## Collapsing unread logic & filter/search support
 
@@ -56,27 +63,36 @@
 - Support advanced search: `search posts` with filters (author, tag, lang, domain).
 - Done?: TUI or CLI supports search returning results; collapse unread groups.
 
-## Remote generator publishing
+## Feed publishing to Bluesky
 
-- CLI command: `feed publish <localFeedID> --service-endpoint <url>` which uses the feed generator starter kit spec to:
-    1. register the feed algorithm
-    2. declare its metadata, and publish it.
-- Use template[^bsky-docs]
-- Done?: CLI outputs the generated feed URI that can be used in Bluesky.
+CLI commands for publishing feeds to AT Protocol (requires SkyFeed server):
 
-## Feed Generator
+- `skycli feed publish <feedID>` - Publish feed to user's Bluesky account
+- `skycli feed unpublish <feedID>` - Remove published feed
+- `skycli feed share <feedID>` - Generate shareable at:// URI
 
-A feed generator in Bluesky terms is just an HTTP service implementing the AT Protocol feed endpoints, e.g.:
+Publishing process:
 
-- `app.bsky.feed.describeFeedGenerator`
-- `app.bsky.feed.getFeedSkeleton`
+1. Feed definition sent to SkyFeed server
+2. Server creates feed generator record in user's repository
+3. Feed becomes discoverable via at:// URI
+4. Users can subscribe in any Bluesky client
 
-When Bluesky clients query these, the generator responds with JSON listing post URIs and optional metadata.
+Done?: CLI publishes feeds via server, outputs at:// URI for sharing.
 
-You can spin this up locally, on localhost:PORT, and register it either:
+## Server Management
 
-- Temporarily (for testing with your own Bluesky account)
-- Permanently (if you later host it and assign a DID)
+CLI commands for managing the SkyFeed server (see `/server/ROADMAP.md` for server architecture):
+
+- `skycli server init` - Initialize new feed generator service
+- `skycli server start` - Start local development server
+- `skycli server stop` - Stop running server
+- `skycli server deploy` - Deploy to configured platform (Fly.io, Docker, etc.)
+- `skycli server status` - Check service health and stats
+- `skycli server logs` - View server logs
+- `skycli server config` - Manage server configuration
+
+Done?: CLI can initialize, start, deploy, and manage SkyFeed server instances.
 
 ## Packaging & distribution
 
@@ -84,5 +100,3 @@ You can spin this up locally, on localhost:PORT, and register it either:
 - Write unit tests (feed logic, collapse logic) and TUI smoke tests.
 - Release via GitHub, include versioning.
     Done?: CI pipeline passes, binaries available.
-
-[^bsky-docs]: <https://docs.bsky.app/docs/starter-templates/custom-feeds> "Custom Feeds | Bluesky"

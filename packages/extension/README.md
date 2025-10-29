@@ -1,29 +1,111 @@
-# SkyPanel
+# SkyPanel Extension
 
-SkyPanel is a Chrome side panel extension that supercharges your Bluesky browsing built with WXT & Svelte.
+Browser extension providing quick access to Bluesky via sidepanel and newtab. Built with WXT + Svelte 5.
+
+**Distribution:** Chrome Web Store, Firefox Add-ons, Edge Add-ons
+
+**Optional Integration:** Can connect to self-hosted SkyPanel server for custom feeds and enhanced features.
 
 ## Features
 
-- Build feeds from timeline, lists, authors, or saved searches.
-    - **Private/local** feeds stored in `chrome.storage.local` (never uploaded).
-- **Collapse** multiple unread posts per follow with accurate counts.
-- **Defaults:**
-    - Mutuals (follows ∩ followers)
-    - Quiet Posters (lower post frequency, recent-first)
-    - Image only with slideshow view
-    - Video only with vertical scroll
-- Search with filters (`app.bsky.feed.searchPosts`) and "save as feed."
-- MV3 **Side Panel** UI-persistent, fast, and doesn’t reload with page navigations.
+**Timeline & Feeds:**
+
+- View timeline, author feeds, and list feeds
+- Computed feeds (mutuals, quiet posters)
+- Post grouping with read state tracking
+- Infinite scroll with cursor-based pagination
+
+**Social:**
+
+- Profile viewing
+- Follow/unfollow users
+- Like, repost, reply to posts
+- Thread viewing
+
+**Search:**
+
+- Post search with filters
+- User search
+
+**Storage:**
+
+- All data stored locally in `chrome.storage.local`
+- Custom feed definitions (execution not yet implemented)
+- Session persistence
+- TTL-based caching for computed feeds
+
+## Development
+
+### Setup
+
+```sh
+# Install dependencies (from repo root)
+pnpm install
+
+# Start development mode
+pnpm dev:extension
+
+# For Firefox
+pnpm --filter @skypanel/extension dev:firefox
+```
+
+### Building
+
+```sh
+# Production build
+pnpm build:extension
+
+# Output: packages/extension/.output/
+```
+
+### Code Quality
+
+```sh
+# Type checking
+pnpm --filter @skypanel/extension check
+
+# Linting
+pnpm --filter @skypanel/extension lint
+```
 
 ## Architecture
 
-- Service Worker: owns `AtpAgent` session, rate-limit/backoff, caching, and message bus to UI
-- Side Panel (Svelte): feed browser + composer, search UI, collapsible groups
-- Storage: `chrome.storage.local` for sessions (JWT/app password session data) & feed definitions; ephemeral in-memory caches for result pages.
-- APIs Used:
-    - Timeline: `app.bsky.feed.getTimeline`
-    - Author feed: `app.bsky.feed.getAuthorFeed`
-    - List feed: `app.bsky.feed.getListFeed`
-    - Graph: `app.bsky.graph.getFollows`, `app.bsky.graph.getFollowers`
-    - Search: `app.bsky.feed.searchPosts`
-    - Public AppView base: `https://public.api.bsky.app` (for public endpoints); authenticated calls proxied via user’s PDS
+**Tech Stack:**
+
+- WXT (Web Extension Toolkit)
+- Svelte 5 with runes (class-based stores)
+- TailwindCSS
+- @atproto/api
+
+**Message Passing:**
+
+```sh
+UI → BackgroundClient → chrome.runtime.sendMessage() → Background Handler → Service → @atproto/api
+```
+
+**Key Directories:**
+
+```sh
+src/
+├── entrypoints/
+│   ├── background/       # Service worker
+│   ├── sidepanel/        # Sidepanel UI
+│   └── newtab/           # New tab UI
+├── lib/
+│   ├── components/       # Svelte components
+│   ├── state/            # Runes-based stores
+│   ├── background/       # Background services
+│   ├── storage/          # Storage wrappers
+│   └── messaging/        # Message types
+```
+
+**State Management:**
+
+- Svelte 5 runes (`$state`, `$derived`)
+- Class-based singleton stores
+
+## References
+
+- [Extension ROADMAP](./ROADMAP.md) - Planned features
+- [WXT Docs](https://wxt.dev/)
+- [Chrome Extensions](https://developer.chrome.com/docs/extensions/)
