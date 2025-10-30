@@ -24,7 +24,6 @@ func StatusAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	sessionRepo, err := reg.GetSessionRepo()

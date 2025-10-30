@@ -18,7 +18,6 @@ func SearchUsersAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	if cmd.Args().Len() == 0 {
@@ -90,7 +89,6 @@ func SearchPostsAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	if cmd.Args().Len() == 0 {
@@ -139,7 +137,6 @@ func SearchFeedsAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	if cmd.Args().Len() == 0 {

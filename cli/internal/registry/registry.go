@@ -87,6 +87,13 @@ func (r *Registry) Init(ctx context.Context) error {
 		if err == nil {
 			refreshToken, _ := sessionRepo.GetRefreshToken(ctx)
 			r.service.SetTokens(accessToken, refreshToken)
+
+			if did, err := sessionRepo.GetDid(ctx); err == nil {
+				r.service.SetDid(did)
+			}
+			if handle, err := sessionRepo.GetHandle(ctx); err == nil {
+				r.service.SetHandle(handle)
+			}
 		}
 	}
 

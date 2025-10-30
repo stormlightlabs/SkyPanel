@@ -2,41 +2,33 @@ package ui
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
-)
-
-const (
-	// Blue
-	ColorPrimary = "#31748f"
-	// Yellow/Gold
-	ColorAccent = "#f6c177"
-	// Red/Pink
-	ColorError = "#eb6f92"
-	// Light text
-	ColorText = "#e0def4"
-	// Dark background
-	ColorBG = "#191724"
+	"github.com/stormlightlabs/skypanel/cli/internal/utils"
 )
 
 var (
-	PrimaryStyle      = newStyle().Foreground(lipgloss.Color(ColorPrimary))
-	AccentStyle       = newStyle().Foreground(lipgloss.Color(ColorAccent))
-	ErrorStyle        = newStyle().Foreground(lipgloss.Color(ColorError))
-	TextStyle         = newStyle().Foreground(lipgloss.Color(ColorText))
-	TitleStyle        = newPBoldStyle(0, 1).Foreground(lipgloss.Color(ColorAccent))
-	SubtitleStyle     = newEmStyle().Foreground(lipgloss.Color(ColorPrimary))
-	SuccessStyle      = newBoldStyle().Foreground(lipgloss.Color(ColorPrimary))
-	WarningStyle      = newBoldStyle().Foreground(lipgloss.Color(ColorAccent))
-	InfoStyle         = newStyle().Foreground(lipgloss.Color(ColorText))
-	BoxStyle          = newPStyle(1, 2).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(ColorPrimary))
-	ErrorBoxStyle     = newPStyle(1, 2).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(ColorError))
-	ListItemStyle     = newStyle().Foreground(lipgloss.Color(ColorText)).PaddingLeft(2)
-	SelectedItemStyle = newBoldStyle().Foreground(lipgloss.Color(ColorAccent)).PaddingLeft(2)
-	HeaderStyle       = newPBoldStyle(0, 1).Foreground(lipgloss.Color(ColorPrimary))
-	CellStyle         = newPStyle(0, 1).Foreground(lipgloss.Color(ColorText))
+	PrimaryStyle      = newStyle().Foreground(lipgloss.Color(utils.ColorPrimary))
+	AccentStyle       = newStyle().Foreground(lipgloss.Color(utils.ColorAccent))
+	ErrorStyle        = newStyle().Foreground(lipgloss.Color(utils.ColorError))
+	TextStyle         = newStyle().Foreground(lipgloss.Color(utils.ColorText))
+	TitleStyle        = newPBoldStyle(0, 1).Foreground(lipgloss.Color(utils.ColorAccent))
+	SubtitleStyle     = newEmStyle().Foreground(lipgloss.Color(utils.ColorPrimary))
+	SuccessStyle      = newBoldStyle().Foreground(lipgloss.Color(utils.ColorPrimary))
+	WarningStyle      = newBoldStyle().Foreground(lipgloss.Color(utils.ColorAccent))
+	InfoStyle         = newStyle().Foreground(lipgloss.Color(utils.ColorText))
+	BoxStyle          = newPStyle(1, 2).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(utils.ColorPrimary))
+	ErrorBoxStyle     = newPStyle(1, 2).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(utils.ColorError))
+	ListItemStyle     = newStyle().Foreground(lipgloss.Color(utils.ColorText)).PaddingLeft(2)
+	SelectedItemStyle = newBoldStyle().Foreground(lipgloss.Color(utils.ColorAccent)).PaddingLeft(2)
+	HeaderStyle       = newPBoldStyle(0, 1).Foreground(lipgloss.Color(utils.ColorPrimary))
+	CellStyle         = newPStyle(0, 1).Foreground(lipgloss.Color(utils.ColorText))
+
+	TableBaseStyle    = newPStyle(0, 1)
+	TableHeaderStyle  = newPStyle(0, 1).Foreground(lipgloss.Color(utils.ColorPrimary)).Bold(true)
+	TableBorderStyle  = newStyle().Foreground(lipgloss.Color(utils.ColorAccent))
+	TableRowEvenStyle = newPStyle(0, 1).Foreground(lipgloss.Color("252"))
+	TableRowOddStyle  = newPStyle(0, 1).Foreground(lipgloss.Color("245"))
 )
 
 func newStyle() lipgloss.Style {
@@ -57,37 +49,6 @@ func newPBoldStyle(v, h int) lipgloss.Style {
 
 func newEmStyle() lipgloss.Style {
 	return newStyle().Italic(true)
-}
-
-var logger *log.Logger
-
-// InitLogger initializes the global logger with structured logging
-func InitLogger(level log.Level) *log.Logger {
-	logger = log.NewWithOptions(os.Stderr, log.Options{
-		ReportTimestamp: true,
-		TimeFormat:      "15:04:05",
-		Level:           level,
-	})
-
-	styles := log.DefaultStyles()
-
-	styles.Levels[log.DebugLevel] = lipgloss.NewStyle().SetString("DEBUG").Foreground(lipgloss.Color(ColorText))
-	styles.Levels[log.InfoLevel] = lipgloss.NewStyle().SetString("INFO").Foreground(lipgloss.Color(ColorPrimary))
-	styles.Levels[log.WarnLevel] = lipgloss.NewStyle().SetString("WARN").Foreground(lipgloss.Color(ColorAccent))
-	styles.Levels[log.ErrorLevel] = lipgloss.NewStyle().SetString("ERROR").Foreground(lipgloss.Color(ColorError))
-	styles.Levels[log.FatalLevel] = lipgloss.NewStyle().SetString("FATAL").Foreground(lipgloss.Color(ColorError)).Bold(true)
-
-	logger.SetStyles(styles)
-
-	return logger
-}
-
-// GetLogger returns the global logger instance
-func GetLogger() *log.Logger {
-	if logger == nil {
-		return InitLogger(log.InfoLevel)
-	}
-	return logger
 }
 
 // success renders a success message

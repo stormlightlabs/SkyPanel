@@ -20,7 +20,6 @@ func FetchTimelineAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	service, err := reg.GetService()
@@ -57,7 +56,6 @@ func FetchFeedAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	if cmd.Args().Len() == 0 {
@@ -120,7 +118,6 @@ func FetchAuthorAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	if cmd.Args().Len() == 0 {

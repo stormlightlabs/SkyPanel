@@ -55,7 +55,6 @@ func LoginAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	var handle, password string

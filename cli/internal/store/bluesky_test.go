@@ -354,8 +354,11 @@ func TestBlueskyService_GetFollows(t *testing.T) {
 		}
 
 		response := GetFollowsResponse{
-			Subject: "did:plc:test",
-			Cursor:  "next-cursor",
+			Subject: &ActorProfile{
+				Did:    "did:plc:test",
+				Handle: "test.bsky.social",
+			},
+			Cursor: "next-cursor",
 			Follows: []ActorProfile{
 				{
 					Did:    "did:plc:follow1",

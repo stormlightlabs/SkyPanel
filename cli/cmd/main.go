@@ -8,13 +8,18 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stormlightlabs/skypanel/cli/internal/registry"
 	"github.com/stormlightlabs/skypanel/cli/internal/ui"
+	"github.com/stormlightlabs/skypanel/cli/internal/utils"
 	"github.com/urfave/cli/v3"
 )
 
-func main() {
-	ui.InitLogger(log.InfoLevel)
+var logger *log.Logger
 
-	logger := ui.GetLogger()
+func init() {
+	utils.InitLogger(log.InfoLevel)
+	logger = utils.GetLogger()
+}
+
+func main() {
 	ctx := context.Background()
 	reg := registry.Get()
 
@@ -23,7 +28,6 @@ func main() {
 	}
 	defer reg.Close()
 
-	// Configure styled help templates
 	cli.HelpPrinter = ui.StyledHelpPrinter
 	cli.RootCommandHelpTemplate = ui.RootCommandHelpTemplate
 	cli.CommandHelpTemplate = ui.CommandHelpTemplate
@@ -36,6 +40,7 @@ func main() {
 		Commands: []*cli.Command{
 			SetupCommand(), LoginCommand(), StatusCommand(),
 			FetchCommand(), SearchCommand(), ListCommand(), ViewCommand(), ExportCommand(),
+			FollowersCommand(), FollowingCommand(),
 		},
 	}
 

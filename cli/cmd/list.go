@@ -18,7 +18,6 @@ func ListPostsAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	service, err := reg.GetService()
@@ -65,7 +64,6 @@ func ListFeedsAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	refetch := cmd.Bool("refetch")

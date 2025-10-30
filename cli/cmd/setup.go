@@ -13,7 +13,6 @@ import (
 )
 
 func SetupAction(ctx context.Context, cmd *cli.Command) error {
-	logger := ui.GetLogger()
 
 	ui.Titleln("Setup: Initializing persistence layer")
 	fmt.Println()

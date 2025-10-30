@@ -19,7 +19,6 @@ func ExportFeedAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	if cmd.Args().Len() == 0 {
@@ -86,7 +85,6 @@ func ExportProfileAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	if cmd.Args().Len() == 0 {
@@ -140,7 +138,6 @@ func ExportPostAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("persistence layer not ready: %w", err)
 	}
 
-	logger := ui.GetLogger()
 	reg := registry.Get()
 
 	if cmd.Args().Len() == 0 {

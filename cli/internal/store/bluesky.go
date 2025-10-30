@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -261,12 +262,26 @@ func (s *BlueskyService) GetAuthorFeed(ctx context.Context, actor string, limit 
 	return &feed, nil
 }
 
-// GetFollows fetches the list of accounts that an actor follows
+// GetFollows fetches the list of accounts that an actor follows.
+// Limit must be between 1-100 (API enforced); defaults to 50 if not specified.
 func (s *BlueskyService) GetFollows(ctx context.Context, actor string, limit int, cursor string) (*GetFollowsResponse, error) {
-	url := fmt.Sprintf("/xrpc/app.bsky.graph.getFollows?actor=%s&limit=%d", actor, limit)
-	if cursor != "" {
-		url += "&cursor=" + cursor
+	if actor == "" {
+		return nil, fmt.Errorf("actor is required")
 	}
+
+	if limit < 1 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	params := fmt.Sprintf("actor=%s&limit=%d", actor, limit)
+	if cursor != "" {
+		params += "&cursor=" + cursor
+	}
+
+	url := "/xrpc/app.bsky.graph.getFollows?" + params
 
 	resp, err := s.Request(ctx, "GET", url, nil, nil)
 	if err != nil {
@@ -285,6 +300,46 @@ func (s *BlueskyService) GetFollows(ctx context.Context, actor string, limit int
 	}
 
 	return &follows, nil
+}
+
+// GetFollowers fetches the list of accounts that follow an actor.
+// Limit must be between 1-100 (API enforced); defaults to 50 if not specified.
+func (s *BlueskyService) GetFollowers(ctx context.Context, actor string, limit int, cursor string) (*GetFollowersResponse, error) {
+	if actor == "" {
+		return nil, fmt.Errorf("actor is required")
+	}
+
+	if limit < 1 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	params := fmt.Sprintf("actor=%s&limit=%d", actor, limit)
+	if cursor != "" {
+		params += "&cursor=" + cursor
+	}
+
+	url := "/xrpc/app.bsky.graph.getFollowers?" + params
+
+	resp, err := s.Request(ctx, "GET", url, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyText, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("getFollowers failed: %s - %s", resp.Status, string(bodyText))
+	}
+
+	var followers GetFollowersResponse
+	if err := json.NewDecoder(resp.Body).Decode(&followers); err != nil {
+		return nil, err
+	}
+
+	return &followers, nil
 }
 
 // GetProfile fetches detailed profile information for an actor.
@@ -409,6 +464,185 @@ func (s *BlueskyService) SetTokens(accessToken, refreshToken string) {
 	}
 }
 
+// GetLastPostDate fetches the most recent post date for an actor.
+// Returns zero time if the actor has no posts or if an error occurs.
+func (s *BlueskyService) GetLastPostDate(ctx context.Context, actor string) (time.Time, error) {
+	feed, err := s.GetAuthorFeed(ctx, actor, 1, "")
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	if len(feed.Feed) == 0 {
+		return time.Time{}, nil
+	}
+
+	indexedAt := feed.Feed[0].Post.IndexedAt
+	lastPost, err := time.Parse(time.RFC3339, indexedAt)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse indexedAt: %w", err)
+	}
+
+	return lastPost, nil
+}
+
+// BatchGetLastPostDates fetches last post dates for multiple actors concurrently.
+// Uses a semaphore to limit concurrent requests to maxConcurrent.
+// Returns a map of actor DID/handle to their last post date.
+func (s *BlueskyService) BatchGetLastPostDates(ctx context.Context, actors []string, maxConcurrent int) map[string]time.Time {
+	results := make(map[string]time.Time)
+	resultsMu := &sync.Mutex{}
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+
+	for _, actor := range actors {
+		wg.Add(1)
+		go func(a string) {
+			defer wg.Done()
+
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			lastPost, err := s.GetLastPostDate(ctx, a)
+			if err != nil {
+				return
+			}
+
+			resultsMu.Lock()
+			results[a] = lastPost
+			resultsMu.Unlock()
+		}(actor)
+	}
+
+	wg.Wait()
+	return results
+}
+
+// BatchGetProfiles fetches full profiles for multiple actors concurrently.
+// Uses a semaphore to limit concurrent requests to maxConcurrent.
+// Returns a map of actor DID/handle to their full ActorProfile.
+func (s *BlueskyService) BatchGetProfiles(ctx context.Context, actors []string, maxConcurrent int) map[string]*ActorProfile {
+	results := make(map[string]*ActorProfile)
+	resultsMu := &sync.Mutex{}
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+
+	for _, actor := range actors {
+		wg.Add(1)
+		go func(a string) {
+			defer wg.Done()
+
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			profile, err := s.GetProfile(ctx, a)
+			if err != nil {
+				return
+			}
+
+			resultsMu.Lock()
+			results[a] = profile
+			resultsMu.Unlock()
+		}(actor)
+	}
+
+	wg.Wait()
+	return results
+}
+
+// PostRate holds posting frequency metrics for an actor
+type PostRate struct {
+	PostsPerDay  float64
+	LastPostDate time.Time
+	SampleSize   int
+}
+
+// BatchGetPostRates calculates posting rates for multiple actors concurrently.
+// Samples recent posts from each actor and calculates posts per day over the lookback period.
+// Uses a semaphore to limit concurrent requests to maxConcurrent.
+// Returns a map of actor DID/handle to their PostRate metrics.
+func (s *BlueskyService) BatchGetPostRates(ctx context.Context, actors []string, sampleSize int, lookbackDays int, maxConcurrent int, progressFn func(current, total int)) map[string]*PostRate {
+	results := make(map[string]*PostRate)
+	resultsMu := &sync.Mutex{}
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+
+	completed := 0
+	completedMu := &sync.Mutex{}
+	total := len(actors)
+
+	for _, actor := range actors {
+		wg.Add(1)
+		go func(a string) {
+			defer wg.Done()
+
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			feed, err := s.GetAuthorFeed(ctx, a, sampleSize, "")
+			if err != nil {
+				return
+			}
+
+			if len(feed.Feed) == 0 {
+				resultsMu.Lock()
+				results[a] = &PostRate{
+					PostsPerDay:  0,
+					LastPostDate: time.Time{},
+					SampleSize:   0,
+				}
+				resultsMu.Unlock()
+
+				completedMu.Lock()
+				completed++
+				if progressFn != nil {
+					progressFn(completed, total)
+				}
+				completedMu.Unlock()
+				return
+			}
+
+			// Get the last post date
+			lastPost, err := time.Parse(time.RFC3339, feed.Feed[0].Post.IndexedAt)
+			if err != nil {
+				return
+			}
+
+			// Filter posts within lookback window
+			cutoffTime := time.Now().AddDate(0, 0, -lookbackDays)
+			recentPosts := 0
+			for _, post := range feed.Feed {
+				indexedAt, err := time.Parse(time.RFC3339, post.Post.IndexedAt)
+				if err != nil {
+					continue
+				}
+				if indexedAt.After(cutoffTime) {
+					recentPosts++
+				}
+			}
+
+			postsPerDay := float64(recentPosts) / float64(lookbackDays)
+
+			resultsMu.Lock()
+			results[a] = &PostRate{
+				PostsPerDay:  postsPerDay,
+				LastPostDate: lastPost,
+				SampleSize:   len(feed.Feed),
+			}
+			resultsMu.Unlock()
+
+			completedMu.Lock()
+			completed++
+			if progressFn != nil {
+				progressFn(completed, total)
+			}
+			completedMu.Unlock()
+		}(actor)
+	}
+
+	wg.Wait()
+	return results
+}
+
 // GetAccessToken returns the current access token
 func (s *BlueskyService) GetAccessToken() string {
 	return s.accessToken
@@ -427,6 +661,16 @@ func (s *BlueskyService) GetDid() string {
 // GetHandle returns the authenticated user's handle
 func (s *BlueskyService) GetHandle() string {
 	return s.handle
+}
+
+// SetDid sets the authenticated user's DID
+func (s *BlueskyService) SetDid(did string) {
+	s.did = did
+}
+
+// SetHandle sets the authenticated user's handle
+func (s *BlueskyService) SetHandle(handle string) {
+	s.handle = handle
 }
 
 // shouldRefreshToken checks if token is 90% through its lifetime

@@ -101,9 +101,17 @@ type GetAuthorFeedResponse struct {
 // GetFollowsResponse models response from app.bsky.graph.getFollows.
 // Returns list of accounts that a given actor follows.
 type GetFollowsResponse struct {
-	Subject string         `json:"subject,omitempty"`
+	Subject *ActorProfile  `json:"subject,omitempty"`
 	Cursor  string         `json:"cursor,omitempty"`
 	Follows []ActorProfile `json:"follows"`
+}
+
+// GetFollowersResponse models response from app.bsky.graph.getFollowers.
+// Returns list of accounts that follow a given actor.
+type GetFollowersResponse struct {
+	Subject   *ActorProfile  `json:"subject,omitempty"`
+	Cursor    string         `json:"cursor,omitempty"`
+	Followers []ActorProfile `json:"followers"`
 }
 
 // FeedViewPost represents a single item in a feed, containing the post and optional context.
