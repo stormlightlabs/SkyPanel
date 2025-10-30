@@ -29,87 +29,169 @@ type followerInfo struct {
 	IsQuiet       bool
 }
 
-// enrichFollowerProfiles fetches full profiles and merges them with lightweight profiles
-func enrichFollowerProfiles(ctx context.Context, service *store.BlueskyService, profiles []store.ActorProfile, logger *log.Logger) ([]followerInfo, []string) {
-	logger.Infof("Fetching detailed profiles for %d accounts...", len(profiles))
-	actors := make([]string, len(profiles))
-	for i, profile := range profiles {
-		actors[i] = profile.Did
-	}
-
-	fullProfiles := service.BatchGetProfiles(ctx, actors, 10)
-	logger.Infof("Fetched %d detailed profiles", len(fullProfiles))
-
-	followerInfos := make([]followerInfo, len(profiles))
-	for i, profile := range profiles {
-		if fullProfile, ok := fullProfiles[profile.Did]; ok {
-			followerInfos[i] = followerInfo{Profile: fullProfile}
-		} else {
-			followerInfos[i] = followerInfo{Profile: &profile}
-		}
-	}
-
-	return followerInfos, actors
+type diffOutput struct {
+	NewFollowers []string `json:"newFollowers"`
+	Unfollows    []string `json:"unfollows"`
+	Summary      struct {
+		BaselineCount   int `json:"baselineCount"`
+		ComparisonCount int `json:"comparisonCount"`
+		NetChange       int `json:"netChange"`
+		NewCount        int `json:"newCount"`
+		UnfollowCount   int `json:"unfollowCount"`
+	} `json:"summary"`
 }
 
-// filterInactive filters follower infos to only include accounts inactive for N days
-func filterInactive(ctx context.Context, service *store.BlueskyService, cacheRepo *store.CacheRepository, followerInfos []followerInfo, actors []string, inactiveDays int, refresh bool, logger *log.Logger) []followerInfo {
-	logger.Infof("Checking activity status (threshold: %d days)...", inactiveDays)
-
-	lastPostDates := service.BatchGetLastPostDatesCached(ctx, cacheRepo, actors, 10, refresh)
-
-	var filtered []followerInfo
-	for i, info := range followerInfos {
-		lastPost, ok := lastPostDates[actors[i]]
-		info.LastPostDate = lastPost
-
-		if !ok || lastPost.IsZero() {
-			info.IsInactive = true
-			info.DaysSincePost = -1
-		} else {
-			daysSince := int(time.Since(lastPost).Hours() / 24)
-			info.DaysSincePost = daysSince
-			info.IsInactive = daysSince > inactiveDays
-		}
-
-		if info.IsInactive {
-			filtered = append(filtered, info)
-		}
-		followerInfos[i] = info
+// FollowersCommand returns the followers command with all subcommands
+func FollowersCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "followers",
+		Usage: "Manage and analyze followers",
+		Commands: []*cli.Command{
+			{
+				Name:      "list",
+				Usage:     "List followers for a user",
+				UsageText: "Fetch all followers with optional filters for inactivity, date range, and output format.",
+				ArgsUsage: " ",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "user",
+						Aliases: []string{"u"},
+						Usage:   "User handle or DID (defaults to authenticated user)",
+					},
+					&cli.IntFlag{
+						Name:    "limit",
+						Aliases: []string{"l"},
+						Usage:   "Maximum number of followers to fetch (0 = all)",
+						Value:   0,
+					},
+					&cli.StringFlag{
+						Name:  "since",
+						Usage: "Filter followers created after date (YYYY-MM-DD)",
+					},
+					&cli.IntFlag{
+						Name:  "inactive",
+						Usage: "Show only followers with no posts in N days",
+						Value: 0,
+					},
+					&cli.BoolFlag{
+						Name:  "quiet",
+						Usage: "Show only quiet posters (low posting frequency)",
+					},
+					&cli.FloatFlag{
+						Name:  "threshold",
+						Usage: "Posts per day threshold for quiet posters (used with --quiet)",
+						Value: 1.0,
+					},
+					&cli.StringFlag{
+						Name:    "output",
+						Aliases: []string{"o"},
+						Usage:   "Output format: table, json, csv",
+						Value:   "table",
+					},
+					&cli.BoolFlag{
+						Name:  "refresh",
+						Usage: "Force refresh cached data (bypasses 24-hour cache)",
+					},
+				},
+				Action: ListFollowersAction,
+			},
+			{
+				Name:      "stats",
+				Usage:     "Show aggregate follower statistics",
+				UsageText: "Calculate aggregate statistics including active/inactive counts, growth metrics, and optional ASCII chart.",
+				ArgsUsage: " ",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "user",
+						Aliases: []string{"u"},
+						Usage:   "User handle or DID (defaults to authenticated user)",
+					},
+					&cli.StringFlag{
+						Name:  "since",
+						Usage: "Calculate growth since date (YYYY-MM-DD)",
+					},
+					&cli.IntFlag{
+						Name:  "inactive",
+						Usage: "Threshold for inactive status (days)",
+						Value: 60,
+					},
+					&cli.BoolFlag{
+						Name:  "chart",
+						Usage: "Display ASCII bar chart",
+					},
+				},
+				Action: FollowersStatsAction,
+			},
+			{
+				Name:      "diff",
+				Usage:     "Compare follower lists between two dates",
+				UsageText: "Compare follower lists to identify new followers and unfollows. Without --until, compares snapshot to current live data.",
+				ArgsUsage: " ",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "user",
+						Aliases: []string{"u"},
+						Usage:   "User handle or DID (defaults to authenticated user)",
+					},
+					&cli.StringFlag{
+						Name:     "since",
+						Usage:    "Start date (YYYY-MM-DD) or snapshot ID",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:  "until",
+						Usage: "End date (YYYY-MM-DD) or snapshot ID (omit to compare with live data)",
+					},
+					&cli.StringFlag{
+						Name:    "output",
+						Aliases: []string{"o"},
+						Usage:   "Output format: table, json, csv",
+						Value:   "table",
+					},
+				},
+				Action: FollowersDiffAction,
+			},
+			{
+				Name:      "export",
+				Usage:     "Export followers to CSV or JSON",
+				UsageText: "Export follower list to CSV or JSON for external analysis, archival, or backup purposes.",
+				ArgsUsage: " ",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "user",
+						Aliases: []string{"u"},
+						Usage:   "User handle or DID (defaults to authenticated user)",
+					},
+					&cli.IntFlag{
+						Name:  "inactive",
+						Usage: "Export only followers with no posts in N days",
+						Value: 0,
+					},
+					&cli.BoolFlag{
+						Name:  "quiet",
+						Usage: "Export only quiet posters (low posting frequency)",
+					},
+					&cli.FloatFlag{
+						Name:  "threshold",
+						Usage: "Posts per day threshold for quiet posters (used with --quiet)",
+						Value: 1.0,
+					},
+					&cli.StringFlag{
+						Name:     "output",
+						Aliases:  []string{"o"},
+						Usage:    "Output format: json, csv",
+						Value:    "csv",
+						Required: true,
+					},
+					&cli.BoolFlag{
+						Name:  "refresh",
+						Usage: "Force refresh cached data (bypasses 24-hour cache)",
+					},
+				},
+				Action: FollowersExportAction,
+			},
+		},
 	}
-
-	return filtered
-}
-
-// filterQuiet filters follower infos to only include quiet posters
-func filterQuiet(ctx context.Context, service *store.BlueskyService, cacheRepo *store.CacheRepository, followerInfos []followerInfo, actors []string, threshold float64, refresh bool, logger *log.Logger) []followerInfo {
-	logger.Infof("Computing post rates (threshold: %.2f posts/day)...", threshold)
-	if refresh {
-		logger.Infof("Refreshing cache (this may take a while)...")
-	}
-
-	postRates := service.BatchGetPostRatesCached(ctx, cacheRepo, actors, 30, 30, 10, refresh, func(current, total int) {
-		if current%10 == 0 || current == total {
-			logger.Infof("Progress: %d/%d accounts analyzed", current, total)
-		}
-	})
-
-	var filtered []followerInfo
-	for i, info := range followerInfos {
-		if rate, ok := postRates[actors[i]]; ok {
-			info.PostsPerDay = rate.PostsPerDay
-			info.LastPostDate = rate.LastPostDate
-			info.IsQuiet = rate.PostsPerDay <= threshold
-		}
-
-		if info.IsQuiet {
-			filtered = append(filtered, info)
-		}
-		followerInfos[i] = info
-	}
-
-	logger.Infof("Found %d quiet posters (posting <= %.2f times/day)", len(filtered), threshold)
-	return filtered
 }
 
 // ListFollowersAction fetches and displays followers for a user with optional filtering
@@ -204,97 +286,6 @@ func ListFollowersAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	followerInfos, actors := enrichFollowerProfiles(ctx, service, allFollowers, logger)
-
-	if inactiveDays > 0 {
-		followerInfos = filterInactive(ctx, service, cacheRepo, followerInfos, actors, inactiveDays, refresh, logger)
-	}
-
-	if quietPosters {
-		followerInfos = filterQuiet(ctx, service, cacheRepo, followerInfos, actors, quietThreshold, refresh, logger)
-	}
-
-	switch outputFormat {
-	case "json":
-		return outputFollowersJSON(followerInfos)
-	case "csv":
-		return outputFollowersCSV(followerInfos, inactiveDays > 0 || quietPosters)
-	default:
-		displayFollowersTable(followerInfos, inactiveDays > 0 || quietPosters)
-	}
-
-	return nil
-}
-
-// ListFollowingAction fetches and displays accounts the user follows
-func ListFollowingAction(ctx context.Context, cmd *cli.Command) error {
-	if err := setup.EnsurePersistenceReady(ctx); err != nil {
-		return fmt.Errorf("persistence layer not ready: %w", err)
-	}
-
-	reg := registry.Get()
-
-	service, err := reg.GetService()
-	if err != nil {
-		return fmt.Errorf("failed to get service: %w", err)
-	}
-
-	if !service.Authenticated() {
-		return fmt.Errorf("not authenticated: run 'skycli login' first")
-	}
-
-	cacheRepo, err := reg.GetCacheRepo()
-	if err != nil {
-		return fmt.Errorf("failed to get cache repository: %w", err)
-	}
-
-	actor := cmd.String("user")
-	if actor == "" {
-		actor = service.GetDid()
-	}
-	inactiveDays := cmd.Int("inactive")
-	mutual := cmd.Bool("mutual")
-	quietPosters := cmd.Bool("quiet")
-	quietThreshold := cmd.Float("threshold")
-	outputFormat := cmd.String("output")
-	refresh := cmd.Bool("refresh")
-
-	logger.Debugf("Fetching following for actor %v", actor)
-
-	var allFollowing []store.ActorProfile
-	cursor := ""
-	page := 0
-	for {
-		page++
-		response, err := service.GetFollows(ctx, actor, 100, cursor)
-		if err != nil {
-			return fmt.Errorf("failed to fetch following: %w", err)
-		}
-
-		allFollowing = append(allFollowing, response.Follows...)
-
-		if response.Cursor != "" {
-			logger.Infof("Fetched page %d (%d following so far)...", page, len(allFollowing))
-		}
-
-		if response.Cursor == "" {
-			break
-		}
-		cursor = response.Cursor
-	}
-
-	logger.Infof("Fetched %d total following", len(allFollowing))
-
-	if mutual {
-		var mutualFollows []store.ActorProfile
-		for _, follow := range allFollowing {
-			if follow.Viewer != nil && follow.Viewer.FollowedBy != "" {
-				mutualFollows = append(mutualFollows, follow)
-			}
-		}
-		allFollowing = mutualFollows
-	}
-
-	followerInfos, actors := enrichFollowerProfiles(ctx, service, allFollowing, logger)
 
 	if inactiveDays > 0 {
 		followerInfos = filterInactive(ctx, service, cacheRepo, followerInfos, actors, inactiveDays, refresh, logger)
@@ -618,90 +609,6 @@ func FollowersDiffAction(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-func displayDiffTable(baselineLabel, comparisonLabel string, baselineCount, comparisonCount int, newFollowers, unfollows []string) {
-	ui.Titleln("Follower Diff: %s → %s", baselineLabel, comparisonLabel)
-	fmt.Println()
-
-	fmt.Printf("Baseline:   %d followers\n", baselineCount)
-	fmt.Printf("Comparison: %d followers\n", comparisonCount)
-	fmt.Printf("Net change: %+d\n", comparisonCount-baselineCount)
-	fmt.Println()
-
-	if len(newFollowers) > 0 {
-		ui.Titleln("New Followers (%d)", len(newFollowers))
-		for _, did := range newFollowers {
-			fmt.Printf("  + %s\n", did)
-		}
-		fmt.Println()
-	}
-
-	if len(unfollows) > 0 {
-		ui.Titleln("Unfollows (%d)", len(unfollows))
-		for _, did := range unfollows {
-			fmt.Printf("  - %s\n", did)
-		}
-		fmt.Println()
-	}
-
-	if len(newFollowers) == 0 && len(unfollows) == 0 {
-		ui.Infoln("No changes detected")
-	}
-}
-
-type diffOutput struct {
-	NewFollowers []string `json:"newFollowers"`
-	Unfollows    []string `json:"unfollows"`
-	Summary      struct {
-		BaselineCount   int `json:"baselineCount"`
-		ComparisonCount int `json:"comparisonCount"`
-		NetChange       int `json:"netChange"`
-		NewCount        int `json:"newCount"`
-		UnfollowCount   int `json:"unfollowCount"`
-	} `json:"summary"`
-}
-
-func outputDiffJSON(newFollowers, unfollows []string) error {
-	output := diffOutput{
-		NewFollowers: newFollowers,
-		Unfollows:    unfollows,
-	}
-	if output.NewFollowers == nil {
-		output.NewFollowers = []string{}
-	}
-	if output.Unfollows == nil {
-		output.Unfollows = []string{}
-	}
-	output.Summary.NewCount = len(newFollowers)
-	output.Summary.UnfollowCount = len(unfollows)
-
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(output)
-}
-
-func outputDiffCSV(newFollowers, unfollows []string) error {
-	writer := csv.NewWriter(os.Stdout)
-	defer writer.Flush()
-
-	if err := writer.Write([]string{"type", "did"}); err != nil {
-		return err
-	}
-
-	for _, did := range newFollowers {
-		if err := writer.Write([]string{"new_follower", did}); err != nil {
-			return err
-		}
-	}
-
-	for _, did := range unfollows {
-		if err := writer.Write([]string{"unfollow", did}); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // FollowersExportAction exports followers to CSV or JSON
 func FollowersExportAction(ctx context.Context, cmd *cli.Command) error {
 	if err := setup.EnsurePersistenceReady(ctx); err != nil {
@@ -778,6 +685,161 @@ func FollowersExportAction(ctx context.Context, cmd *cli.Command) error {
 	default:
 		return fmt.Errorf("output format must be 'json' or 'csv'")
 	}
+}
+
+// enrichFollowerProfiles fetches full profiles and merges them with lightweight profiles
+func enrichFollowerProfiles(ctx context.Context, service *store.BlueskyService, profiles []store.ActorProfile, logger *log.Logger) ([]followerInfo, []string) {
+	logger.Infof("Fetching detailed profiles for %d accounts...", len(profiles))
+	actors := make([]string, len(profiles))
+	for i, profile := range profiles {
+		actors[i] = profile.Did
+	}
+
+	fullProfiles := service.BatchGetProfiles(ctx, actors, 10)
+	logger.Infof("Fetched %d detailed profiles", len(fullProfiles))
+
+	followerInfos := make([]followerInfo, len(profiles))
+	for i, profile := range profiles {
+		if fullProfile, ok := fullProfiles[profile.Did]; ok {
+			followerInfos[i] = followerInfo{Profile: fullProfile}
+		} else {
+			followerInfos[i] = followerInfo{Profile: &profile}
+		}
+	}
+
+	return followerInfos, actors
+}
+
+// filterInactive filters follower infos to only include accounts inactive for N days
+func filterInactive(ctx context.Context, service *store.BlueskyService, cacheRepo *store.CacheRepository, followerInfos []followerInfo, actors []string, inactiveDays int, refresh bool, logger *log.Logger) []followerInfo {
+	logger.Infof("Checking activity status (threshold: %d days)...", inactiveDays)
+
+	lastPostDates := service.BatchGetLastPostDatesCached(ctx, cacheRepo, actors, 10, refresh)
+
+	var filtered []followerInfo
+	for i, info := range followerInfos {
+		lastPost, ok := lastPostDates[actors[i]]
+		info.LastPostDate = lastPost
+
+		if !ok || lastPost.IsZero() {
+			info.IsInactive = true
+			info.DaysSincePost = -1
+		} else {
+			daysSince := int(time.Since(lastPost).Hours() / 24)
+			info.DaysSincePost = daysSince
+			info.IsInactive = daysSince > inactiveDays
+		}
+
+		if info.IsInactive {
+			filtered = append(filtered, info)
+		}
+		followerInfos[i] = info
+	}
+
+	return filtered
+}
+
+// filterQuiet filters follower infos to only include quiet posters
+func filterQuiet(ctx context.Context, service *store.BlueskyService, cacheRepo *store.CacheRepository, followerInfos []followerInfo, actors []string, threshold float64, refresh bool, logger *log.Logger) []followerInfo {
+	logger.Infof("Computing post rates (threshold: %.2f posts/day)...", threshold)
+	if refresh {
+		logger.Infof("Refreshing cache (this may take a while)...")
+	}
+
+	postRates := service.BatchGetPostRatesCached(ctx, cacheRepo, actors, 30, 30, 10, refresh, func(current, total int) {
+		if current%10 == 0 || current == total {
+			logger.Infof("Progress: %d/%d accounts analyzed", current, total)
+		}
+	})
+
+	var filtered []followerInfo
+	for i, info := range followerInfos {
+		if rate, ok := postRates[actors[i]]; ok {
+			info.PostsPerDay = rate.PostsPerDay
+			info.LastPostDate = rate.LastPostDate
+			info.IsQuiet = rate.PostsPerDay <= threshold
+		}
+
+		if info.IsQuiet {
+			filtered = append(filtered, info)
+		}
+		followerInfos[i] = info
+	}
+
+	logger.Infof("Found %d quiet posters (posting <= %.2f times/day)", len(filtered), threshold)
+	return filtered
+}
+
+func displayDiffTable(baselineLabel, comparisonLabel string, baselineCount, comparisonCount int, newFollowers, unfollows []string) {
+	ui.Titleln("Follower Diff: %s → %s", baselineLabel, comparisonLabel)
+	fmt.Println()
+
+	fmt.Printf("Baseline:   %d followers\n", baselineCount)
+	fmt.Printf("Comparison: %d followers\n", comparisonCount)
+	fmt.Printf("Net change: %+d\n", comparisonCount-baselineCount)
+	fmt.Println()
+
+	if len(newFollowers) > 0 {
+		ui.Titleln("New Followers (%d)", len(newFollowers))
+		for _, did := range newFollowers {
+			fmt.Printf("  + %s\n", did)
+		}
+		fmt.Println()
+	}
+
+	if len(unfollows) > 0 {
+		ui.Titleln("Unfollows (%d)", len(unfollows))
+		for _, did := range unfollows {
+			fmt.Printf("  - %s\n", did)
+		}
+		fmt.Println()
+	}
+
+	if len(newFollowers) == 0 && len(unfollows) == 0 {
+		ui.Infoln("No changes detected")
+	}
+}
+
+func outputDiffJSON(newFollowers, unfollows []string) error {
+	output := diffOutput{
+		NewFollowers: newFollowers,
+		Unfollows:    unfollows,
+	}
+	if output.NewFollowers == nil {
+		output.NewFollowers = []string{}
+	}
+	if output.Unfollows == nil {
+		output.Unfollows = []string{}
+	}
+	output.Summary.NewCount = len(newFollowers)
+	output.Summary.UnfollowCount = len(unfollows)
+
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(output)
+}
+
+func outputDiffCSV(newFollowers, unfollows []string) error {
+	writer := csv.NewWriter(os.Stdout)
+	defer writer.Flush()
+
+	if err := writer.Write([]string{"type", "did"}); err != nil {
+		return err
+	}
+
+	for _, did := range newFollowers {
+		if err := writer.Write([]string{"new_follower", did}); err != nil {
+			return err
+		}
+	}
+
+	for _, did := range unfollows {
+		if err := writer.Write([]string{"unfollow", did}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // formatTimeSince formats a time duration into a human-readable string.
@@ -974,209 +1036,4 @@ func displayActivityChart(active, inactive int) {
 
 	fmt.Printf("%s%s\n", activeBar, inactiveBar)
 	fmt.Printf("█ Active   ▒ Inactive\n")
-}
-
-// FollowersCommand returns the followers command with all subcommands
-func FollowersCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "followers",
-		Usage: "Manage and analyze followers",
-		Commands: []*cli.Command{
-			{
-				Name:      "list",
-				Usage:     "List followers for a user",
-				UsageText: "Fetch all followers with optional filters for inactivity, date range, and output format.",
-				ArgsUsage: " ",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:    "user",
-						Aliases: []string{"u"},
-						Usage:   "User handle or DID (defaults to authenticated user)",
-					},
-					&cli.IntFlag{
-						Name:    "limit",
-						Aliases: []string{"l"},
-						Usage:   "Maximum number of followers to fetch (0 = all)",
-						Value:   0,
-					},
-					&cli.StringFlag{
-						Name:  "since",
-						Usage: "Filter followers created after date (YYYY-MM-DD)",
-					},
-					&cli.IntFlag{
-						Name:  "inactive",
-						Usage: "Show only followers with no posts in N days",
-						Value: 0,
-					},
-					&cli.BoolFlag{
-						Name:  "quiet",
-						Usage: "Show only quiet posters (low posting frequency)",
-					},
-					&cli.FloatFlag{
-						Name:  "threshold",
-						Usage: "Posts per day threshold for quiet posters (used with --quiet)",
-						Value: 1.0,
-					},
-					&cli.StringFlag{
-						Name:    "output",
-						Aliases: []string{"o"},
-						Usage:   "Output format: table, json, csv",
-						Value:   "table",
-					},
-					&cli.BoolFlag{
-						Name:  "refresh",
-						Usage: "Force refresh cached data (bypasses 24-hour cache)",
-					},
-				},
-				Action: ListFollowersAction,
-			},
-			{
-				Name:      "stats",
-				Usage:     "Show aggregate follower statistics",
-				UsageText: "Calculate aggregate statistics including active/inactive counts, growth metrics, and optional ASCII chart.",
-				ArgsUsage: " ",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:    "user",
-						Aliases: []string{"u"},
-						Usage:   "User handle or DID (defaults to authenticated user)",
-					},
-					&cli.StringFlag{
-						Name:  "since",
-						Usage: "Calculate growth since date (YYYY-MM-DD)",
-					},
-					&cli.IntFlag{
-						Name:  "inactive",
-						Usage: "Threshold for inactive status (days)",
-						Value: 60,
-					},
-					&cli.BoolFlag{
-						Name:  "chart",
-						Usage: "Display ASCII bar chart",
-					},
-				},
-				Action: FollowersStatsAction,
-			},
-			{
-				Name:      "diff",
-				Usage:     "Compare follower lists between two dates",
-				UsageText: "Compare follower lists to identify new followers and unfollows. Without --until, compares snapshot to current live data.",
-				ArgsUsage: " ",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:    "user",
-						Aliases: []string{"u"},
-						Usage:   "User handle or DID (defaults to authenticated user)",
-					},
-					&cli.StringFlag{
-						Name:     "since",
-						Usage:    "Start date (YYYY-MM-DD) or snapshot ID",
-						Required: true,
-					},
-					&cli.StringFlag{
-						Name:  "until",
-						Usage: "End date (YYYY-MM-DD) or snapshot ID (omit to compare with live data)",
-					},
-					&cli.StringFlag{
-						Name:    "output",
-						Aliases: []string{"o"},
-						Usage:   "Output format: table, json, csv",
-						Value:   "table",
-					},
-				},
-				Action: FollowersDiffAction,
-			},
-			{
-				Name:      "export",
-				Usage:     "Export followers to CSV or JSON",
-				UsageText: "Export follower list to CSV or JSON for external analysis, archival, or backup purposes.",
-				ArgsUsage: " ",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:    "user",
-						Aliases: []string{"u"},
-						Usage:   "User handle or DID (defaults to authenticated user)",
-					},
-					&cli.IntFlag{
-						Name:  "inactive",
-						Usage: "Export only followers with no posts in N days",
-						Value: 0,
-					},
-					&cli.BoolFlag{
-						Name:  "quiet",
-						Usage: "Export only quiet posters (low posting frequency)",
-					},
-					&cli.FloatFlag{
-						Name:  "threshold",
-						Usage: "Posts per day threshold for quiet posters (used with --quiet)",
-						Value: 1.0,
-					},
-					&cli.StringFlag{
-						Name:     "output",
-						Aliases:  []string{"o"},
-						Usage:    "Output format: json, csv",
-						Value:    "csv",
-						Required: true,
-					},
-					&cli.BoolFlag{
-						Name:  "refresh",
-						Usage: "Force refresh cached data (bypasses 24-hour cache)",
-					},
-				},
-				Action: FollowersExportAction,
-			},
-		},
-	}
-}
-
-// FollowingCommand returns the following command
-func FollowingCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "following",
-		Usage: "Manage and analyze accounts you follow",
-		Commands: []*cli.Command{
-			{
-				Name:      "list",
-				Usage:     "List accounts you follow",
-				UsageText: "Fetch all accounts you follow with optional filters for inactive accounts and mutual follows.",
-				ArgsUsage: " ",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:    "user",
-						Aliases: []string{"u"},
-						Usage:   "User handle or DID (defaults to authenticated user)",
-					},
-					&cli.IntFlag{
-						Name:  "inactive",
-						Usage: "Show only accounts with no posts in N days",
-						Value: 0,
-					},
-					&cli.BoolFlag{
-						Name:  "mutual",
-						Usage: "Show only mutual follows",
-					},
-					&cli.BoolFlag{
-						Name:  "quiet",
-						Usage: "Show only quiet posters (low posting frequency)",
-					},
-					&cli.FloatFlag{
-						Name:  "threshold",
-						Usage: "Posts per day threshold for quiet posters (used with --quiet)",
-						Value: 1.0,
-					},
-					&cli.StringFlag{
-						Name:    "output",
-						Aliases: []string{"o"},
-						Usage:   "Output format: table, json, csv",
-						Value:   "table",
-					},
-					&cli.BoolFlag{
-						Name:  "refresh",
-						Usage: "Force refresh cached data (bypasses 24-hour cache)",
-					},
-				},
-				Action: ListFollowingAction,
-			},
-		},
-	}
 }
