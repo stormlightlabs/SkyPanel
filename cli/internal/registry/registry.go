@@ -15,13 +15,15 @@ var (
 
 // Registry manages singleton instances of repositories and services
 type Registry struct {
-	service     *store.BlueskyService
-	sessionRepo *store.SessionRepository
-	feedRepo    *store.FeedRepository
-	postRepo    *store.PostRepository
-	profileRepo *store.ProfileRepository
-	initialized bool
-	mu          sync.RWMutex
+	service      *store.BlueskyService
+	sessionRepo  *store.SessionRepository
+	feedRepo     *store.FeedRepository
+	postRepo     *store.PostRepository
+	profileRepo  *store.ProfileRepository
+	snapshotRepo *store.SnapshotRepository
+	cacheRepo    *store.CacheRepository
+	initialized  bool
+	mu           sync.RWMutex
 }
 
 // Get returns the singleton registry instance
@@ -80,6 +82,24 @@ func (r *Registry) Init(ctx context.Context) error {
 	}
 	r.profileRepo = profileRepo
 
+	snapshotRepo, err := store.NewSnapshotRepository()
+	if err != nil {
+		return &RegistryError{Op: "InitSnapshotRepo", Err: err}
+	}
+	if err := snapshotRepo.Init(ctx); err != nil {
+		return &RegistryError{Op: "InitSnapshotRepo", Err: err}
+	}
+	r.snapshotRepo = snapshotRepo
+
+	cacheRepo, err := store.NewCacheRepository()
+	if err != nil {
+		return &RegistryError{Op: "InitCacheRepo", Err: err}
+	}
+	if err := cacheRepo.Init(ctx); err != nil {
+		return &RegistryError{Op: "InitCacheRepo", Err: err}
+	}
+	r.cacheRepo = cacheRepo
+
 	r.service = store.NewBlueskyService("")
 
 	if sessionRepo.HasValidSession(ctx) {
@@ -134,6 +154,18 @@ func (r *Registry) Close() error {
 
 	if r.profileRepo != nil {
 		if err := r.profileRepo.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if r.snapshotRepo != nil {
+		if err := r.snapshotRepo.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if r.cacheRepo != nil {
+		if err := r.cacheRepo.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -225,6 +257,38 @@ func (r *Registry) GetProfileRepo() (*store.ProfileRepository, error) {
 	}
 
 	return r.profileRepo, nil
+}
+
+// GetSnapshotRepo returns the SnapshotRepository singleton
+func (r *Registry) GetSnapshotRepo() (*store.SnapshotRepository, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if !r.initialized {
+		return nil, &RegistryError{Op: "GetSnapshotRepo", Err: errors.New("registry not initialized")}
+	}
+
+	if r.snapshotRepo == nil {
+		return nil, &RegistryError{Op: "GetSnapshotRepo", Err: errors.New("snapshot repository not available")}
+	}
+
+	return r.snapshotRepo, nil
+}
+
+// GetCacheRepo returns the CacheRepository singleton
+func (r *Registry) GetCacheRepo() (*store.CacheRepository, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if !r.initialized {
+		return nil, &RegistryError{Op: "GetCacheRepo", Err: errors.New("registry not initialized")}
+	}
+
+	if r.cacheRepo == nil {
+		return nil, &RegistryError{Op: "GetCacheRepo", Err: errors.New("cache repository not available")}
+	}
+
+	return r.cacheRepo, nil
 }
 
 // IsInitialized returns whether the registry has been initialized

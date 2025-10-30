@@ -8,10 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 const (
@@ -367,7 +370,6 @@ func (s *BlueskyService) GetProfile(ctx context.Context, actor string) (*ActorPr
 }
 
 // SearchActors searches for actors (users) matching the query string.
-// Returns actor profiles with pagination support.
 func (s *BlueskyService) SearchActors(ctx context.Context, query string, limit int, cursor string) (*SearchActorsResponse, error) {
 	urlPath := fmt.Sprintf("/xrpc/app.bsky.actor.searchActors?q=%s&limit=%d", strings.ReplaceAll(query, " ", "+"), limit)
 	if cursor != "" {
@@ -465,7 +467,6 @@ func (s *BlueskyService) SetTokens(accessToken, refreshToken string) {
 }
 
 // GetLastPostDate fetches the most recent post date for an actor.
-// Returns zero time if the actor has no posts or if an error occurs.
 func (s *BlueskyService) GetLastPostDate(ctx context.Context, actor string) (time.Time, error) {
 	feed, err := s.GetAuthorFeed(ctx, actor, 1, "")
 	if err != nil {
@@ -485,9 +486,8 @@ func (s *BlueskyService) GetLastPostDate(ctx context.Context, actor string) (tim
 	return lastPost, nil
 }
 
-// BatchGetLastPostDates fetches last post dates for multiple actors concurrently.
+// BatchGetLastPostDates fetches last post dates for multiple actors concurrently, as a map of actor DID/handle to their last post date..
 // Uses a semaphore to limit concurrent requests to maxConcurrent.
-// Returns a map of actor DID/handle to their last post date.
 func (s *BlueskyService) BatchGetLastPostDates(ctx context.Context, actors []string, maxConcurrent int) map[string]time.Time {
 	results := make(map[string]time.Time)
 	resultsMu := &sync.Mutex{}
@@ -517,9 +517,8 @@ func (s *BlueskyService) BatchGetLastPostDates(ctx context.Context, actors []str
 	return results
 }
 
-// BatchGetProfiles fetches full profiles for multiple actors concurrently.
-// Uses a semaphore to limit concurrent requests to maxConcurrent.
-// Returns a map of actor DID/handle to their full ActorProfile.
+// BatchGetProfiles fetches full profiles for multiple actors concurrently, as a map of actor DID/handle to their full ActorProfile.
+// Uses a semaphore to limit concurrent requests to maxConcurrent..
 func (s *BlueskyService) BatchGetProfiles(ctx context.Context, actors []string, maxConcurrent int) map[string]*ActorProfile {
 	results := make(map[string]*ActorProfile)
 	resultsMu := &sync.Mutex{}
@@ -556,10 +555,10 @@ type PostRate struct {
 	SampleSize   int
 }
 
-// BatchGetPostRates calculates posting rates for multiple actors concurrently.
+// BatchGetPostRates calculates posting rates for multiple actors concurrently, as a map of actor DID/handle to their [PostRate] metrics.
+//
 // Samples recent posts from each actor and calculates posts per day over the lookback period.
 // Uses a semaphore to limit concurrent requests to maxConcurrent.
-// Returns a map of actor DID/handle to their PostRate metrics.
 func (s *BlueskyService) BatchGetPostRates(ctx context.Context, actors []string, sampleSize int, lookbackDays int, maxConcurrent int, progressFn func(current, total int)) map[string]*PostRate {
 	results := make(map[string]*PostRate)
 	resultsMu := &sync.Mutex{}
@@ -601,13 +600,11 @@ func (s *BlueskyService) BatchGetPostRates(ctx context.Context, actors []string,
 				return
 			}
 
-			// Get the last post date
 			lastPost, err := time.Parse(time.RFC3339, feed.Feed[0].Post.IndexedAt)
 			if err != nil {
 				return
 			}
 
-			// Filter posts within lookback window
 			cutoffTime := time.Now().AddDate(0, 0, -lookbackDays)
 			recentPosts := 0
 			for _, post := range feed.Feed {
@@ -743,4 +740,120 @@ func parseJWTExpiry(token string) (time.Time, error) {
 	}
 
 	return time.Unix(claims.Exp, 0), nil
+}
+
+// BatchGetPostRatesCached calculates posting rates for multiple actors with caching support.
+//
+// Checks cache first, falls back to API for cache misses, and saves results to cache.
+// If refresh is true, bypasses cache and refetches all data from API.
+//
+// TODO: Implement per-item TTL for more efficient cache invalidation.
+// FIXME: this function signature is ridiculous
+func (s *BlueskyService) BatchGetPostRatesCached(ctx context.Context, cacheRepo *CacheRepository, actors []string, sampleSize int, lookbackDays int, maxConcurrent int, refresh bool, progressFn func(current, total int)) map[string]*PostRate {
+	results := make(map[string]*PostRate)
+
+	// If not refreshing, try to load from cache
+	var actorsToFetch []string
+	if !refresh {
+		cached, err := cacheRepo.GetPostRates(ctx, actors)
+		if err == nil {
+			for _, actor := range actors {
+				if cache, ok := cached[actor]; ok && cache.IsFresh() {
+					results[actor] = &PostRate{
+						PostsPerDay:  cache.PostsPerDay,
+						LastPostDate: cache.LastPostDate,
+						SampleSize:   cache.SampleSize,
+					}
+				} else {
+					actorsToFetch = append(actorsToFetch, actor)
+				}
+			}
+		} else {
+			actorsToFetch = actors
+		}
+	} else {
+		actorsToFetch = actors
+	}
+
+	if len(actorsToFetch) > 0 {
+		apiResults := s.BatchGetPostRates(ctx, actorsToFetch, sampleSize, lookbackDays, maxConcurrent, progressFn)
+		maps.Copy(results, apiResults)
+
+		var cacheModels []*PostRateCacheModel
+		for actor, postRate := range apiResults {
+			cacheModels = append(cacheModels, &PostRateCacheModel{
+				ActorDid:     actor,
+				PostsPerDay:  postRate.PostsPerDay,
+				LastPostDate: postRate.LastPostDate,
+				SampleSize:   postRate.SampleSize,
+			})
+		}
+
+		if len(cacheModels) > 0 {
+			if err := cacheRepo.SavePostRates(ctx, cacheModels); err != nil {
+				// Log error but don't fail - cache save is non-critical
+			}
+		}
+	}
+
+	return results
+}
+
+// BatchGetLastPostDatesCached fetches last post dates for multiple actors with caching support.
+//
+// Checks cache first, falls back to API for cache misses, and saves results to cache.
+// If refresh is true, bypasses cache and refetches all data from API.
+//
+// TODO: Implement per-item TTL for more efficient cache invalidation.
+// FIXME: this function signature is ridiculous
+func (s *BlueskyService) BatchGetLastPostDatesCached(ctx context.Context, cacheRepo *CacheRepository, actors []string, maxConcurrent int, refresh bool) map[string]time.Time {
+	results := make(map[string]time.Time)
+
+	var actorsToFetch []string
+	if !refresh {
+		cached, err := cacheRepo.GetActivities(ctx, actors)
+		if err == nil {
+			for _, actor := range actors {
+				if cache, ok := cached[actor]; ok && cache.IsFresh() {
+					if cache.HasPosted() {
+						results[actor] = cache.LastPostDate
+					}
+				} else {
+					actorsToFetch = append(actorsToFetch, actor)
+				}
+			}
+		} else {
+			actorsToFetch = actors
+		}
+	} else {
+		actorsToFetch = actors
+	}
+
+	if len(actorsToFetch) > 0 {
+		apiResults := s.BatchGetLastPostDates(ctx, actorsToFetch, maxConcurrent)
+		maps.Copy(results, apiResults)
+
+		var cacheModels []*ActivityCacheModel
+		for _, actor := range actorsToFetch {
+			lastPostDate, hasPosted := apiResults[actor]
+			cacheModels = append(cacheModels, &ActivityCacheModel{
+				ActorDid:     actor,
+				LastPostDate: lastPostDate,
+				FetchedAt:    time.Now(),
+				ExpiresAt:    time.Now().Add(24 * time.Hour),
+			})
+
+			if !hasPosted {
+				results[actor] = time.Time{}
+			}
+		}
+
+		if len(cacheModels) > 0 {
+			if err := cacheRepo.SaveActivities(ctx, cacheModels); err != nil {
+				log.Warnf("save failed with error %v", err.Error())
+			}
+		}
+	}
+
+	return results
 }

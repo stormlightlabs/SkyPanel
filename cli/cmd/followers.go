@@ -53,10 +53,10 @@ func enrichFollowerProfiles(ctx context.Context, service *store.BlueskyService, 
 }
 
 // filterInactive filters follower infos to only include accounts inactive for N days
-func filterInactive(ctx context.Context, service *store.BlueskyService, followerInfos []followerInfo, actors []string, inactiveDays int, logger *log.Logger) []followerInfo {
+func filterInactive(ctx context.Context, service *store.BlueskyService, cacheRepo *store.CacheRepository, followerInfos []followerInfo, actors []string, inactiveDays int, refresh bool, logger *log.Logger) []followerInfo {
 	logger.Infof("Checking activity status (threshold: %d days)...", inactiveDays)
 
-	lastPostDates := service.BatchGetLastPostDates(ctx, actors, 10)
+	lastPostDates := service.BatchGetLastPostDatesCached(ctx, cacheRepo, actors, 10, refresh)
 
 	var filtered []followerInfo
 	for i, info := range followerInfos {
@@ -82,10 +82,13 @@ func filterInactive(ctx context.Context, service *store.BlueskyService, follower
 }
 
 // filterQuiet filters follower infos to only include quiet posters
-func filterQuiet(ctx context.Context, service *store.BlueskyService, followerInfos []followerInfo, actors []string, threshold float64, logger *log.Logger) []followerInfo {
-	logger.Infof("Computing post rates (threshold: %.2f posts/day, this may take a while)...", threshold)
+func filterQuiet(ctx context.Context, service *store.BlueskyService, cacheRepo *store.CacheRepository, followerInfos []followerInfo, actors []string, threshold float64, refresh bool, logger *log.Logger) []followerInfo {
+	logger.Infof("Computing post rates (threshold: %.2f posts/day)...", threshold)
+	if refresh {
+		logger.Infof("Refreshing cache (this may take a while)...")
+	}
 
-	postRates := service.BatchGetPostRates(ctx, actors, 30, 30, 10, func(current, total int) {
+	postRates := service.BatchGetPostRatesCached(ctx, cacheRepo, actors, 30, 30, 10, refresh, func(current, total int) {
 		if current%10 == 0 || current == total {
 			logger.Infof("Progress: %d/%d accounts analyzed", current, total)
 		}
@@ -126,6 +129,11 @@ func ListFollowersAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("not authenticated: run 'skycli login' first")
 	}
 
+	cacheRepo, err := reg.GetCacheRepo()
+	if err != nil {
+		return fmt.Errorf("failed to get cache repository: %w", err)
+	}
+
 	actor := cmd.String("user")
 	if actor == "" {
 		actor = service.GetDid()
@@ -136,6 +144,7 @@ func ListFollowersAction(ctx context.Context, cmd *cli.Command) error {
 	quietPosters := cmd.Bool("quiet")
 	quietThreshold := cmd.Float("threshold")
 	outputFormat := cmd.String("output")
+	refresh := cmd.Bool("refresh")
 
 	if limit == 0 {
 		logger.Debugf("Fetching all followers for %v", actor)
@@ -197,11 +206,11 @@ func ListFollowersAction(ctx context.Context, cmd *cli.Command) error {
 	followerInfos, actors := enrichFollowerProfiles(ctx, service, allFollowers, logger)
 
 	if inactiveDays > 0 {
-		followerInfos = filterInactive(ctx, service, followerInfos, actors, inactiveDays, logger)
+		followerInfos = filterInactive(ctx, service, cacheRepo, followerInfos, actors, inactiveDays, refresh, logger)
 	}
 
 	if quietPosters {
-		followerInfos = filterQuiet(ctx, service, followerInfos, actors, quietThreshold, logger)
+		followerInfos = filterQuiet(ctx, service, cacheRepo, followerInfos, actors, quietThreshold, refresh, logger)
 	}
 
 	switch outputFormat {
@@ -233,6 +242,11 @@ func ListFollowingAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("not authenticated: run 'skycli login' first")
 	}
 
+	cacheRepo, err := reg.GetCacheRepo()
+	if err != nil {
+		return fmt.Errorf("failed to get cache repository: %w", err)
+	}
+
 	actor := cmd.String("user")
 	if actor == "" {
 		actor = service.GetDid()
@@ -242,6 +256,7 @@ func ListFollowingAction(ctx context.Context, cmd *cli.Command) error {
 	quietPosters := cmd.Bool("quiet")
 	quietThreshold := cmd.Float("threshold")
 	outputFormat := cmd.String("output")
+	refresh := cmd.Bool("refresh")
 
 	logger.Debugf("Fetching following for actor %v", actor)
 
@@ -282,11 +297,11 @@ func ListFollowingAction(ctx context.Context, cmd *cli.Command) error {
 	followerInfos, actors := enrichFollowerProfiles(ctx, service, allFollowing, logger)
 
 	if inactiveDays > 0 {
-		followerInfos = filterInactive(ctx, service, followerInfos, actors, inactiveDays, logger)
+		followerInfos = filterInactive(ctx, service, cacheRepo, followerInfos, actors, inactiveDays, refresh, logger)
 	}
 
 	if quietPosters {
-		followerInfos = filterQuiet(ctx, service, followerInfos, actors, quietThreshold, logger)
+		followerInfos = filterQuiet(ctx, service, cacheRepo, followerInfos, actors, quietThreshold, refresh, logger)
 	}
 
 	switch outputFormat {
@@ -449,19 +464,240 @@ func FollowersDiffAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("not authenticated: run 'skycli login' first")
 	}
 
-	sinceStr := cmd.String("since")
-	untilStr := cmd.String("until")
-
-	if sinceStr == "" || untilStr == "" {
-		return fmt.Errorf("both --since and --until are required")
+	snapshotRepo, err := reg.GetSnapshotRepo()
+	if err != nil {
+		return fmt.Errorf("failed to get snapshot repository: %w", err)
 	}
 
-	// TODO: Implement snapshot storage and comparison
-	// This requires a way to store historical follower lists
-	// Options: SQLite table, JSON files with timestamps, etc.
+	actor := cmd.String("user")
+	if actor == "" {
+		actor = service.GetDid()
+	}
+	sinceStr := cmd.String("since")
+	untilStr := cmd.String("until")
+	outputFormat := cmd.String("output")
 
-	ui.Infoln("Diff functionality requires snapshot storage (not yet implemented)")
-	ui.Infoln("Consider using 'followers export' to create manual snapshots")
+	// Parse since parameter (date or snapshot ID)
+	sinceDate, err := time.Parse("2006-01-02", sinceStr)
+	var baselineSnapshot *store.SnapshotModel
+	if err != nil {
+		// Not a date, try as snapshot ID
+		model, err := snapshotRepo.Get(ctx, sinceStr)
+		if err != nil {
+			return fmt.Errorf("invalid --since parameter (not a date or snapshot ID): %w", err)
+		}
+		if model == nil {
+			return fmt.Errorf("snapshot not found: %s", sinceStr)
+		}
+		baselineSnapshot = model.(*store.SnapshotModel)
+	} else {
+		// Find snapshot by date
+		baselineSnapshot, err = snapshotRepo.FindByUserTypeAndDate(ctx, actor, "followers", sinceDate)
+		if err != nil {
+			return fmt.Errorf("failed to find snapshot: %w", err)
+		}
+		if baselineSnapshot == nil {
+			return fmt.Errorf("no snapshot found for %s on or before %s", actor, sinceStr)
+		}
+	}
+
+	logger.Infof("Using baseline snapshot from %s (%d followers)", baselineSnapshot.CreatedAt().Format("2006-01-02 15:04"), baselineSnapshot.TotalCount)
+
+	// Get baseline follower DIDs
+	baselineDids, err := snapshotRepo.GetActorDids(ctx, baselineSnapshot.ID())
+	if err != nil {
+		return fmt.Errorf("failed to get baseline followers: %w", err)
+	}
+
+	var comparisonDids []string
+	var comparisonLabel string
+
+	if untilStr != "" {
+		// Snapshot-to-snapshot comparison
+		untilDate, err := time.Parse("2006-01-02", untilStr)
+		var comparisonSnapshot *store.SnapshotModel
+		if err != nil {
+			// Not a date, try as snapshot ID
+			model, err := snapshotRepo.Get(ctx, untilStr)
+			if err != nil {
+				return fmt.Errorf("invalid --until parameter (not a date or snapshot ID): %w", err)
+			}
+			if model == nil {
+				return fmt.Errorf("snapshot not found: %s", untilStr)
+			}
+			comparisonSnapshot = model.(*store.SnapshotModel)
+		} else {
+			// Find snapshot by date
+			comparisonSnapshot, err = snapshotRepo.FindByUserTypeAndDate(ctx, actor, "followers", untilDate)
+			if err != nil {
+				return fmt.Errorf("failed to find snapshot: %w", err)
+			}
+			if comparisonSnapshot == nil {
+				return fmt.Errorf("no snapshot found for %s on or before %s", actor, untilStr)
+			}
+		}
+
+		logger.Infof("Comparing with snapshot from %s (%d followers)", comparisonSnapshot.CreatedAt().Format("2006-01-02 15:04"), comparisonSnapshot.TotalCount)
+		comparisonLabel = comparisonSnapshot.CreatedAt().Format("2006-01-02 15:04")
+
+		comparisonDids, err = snapshotRepo.GetActorDids(ctx, comparisonSnapshot.ID())
+		if err != nil {
+			return fmt.Errorf("failed to get comparison followers: %w", err)
+		}
+	} else {
+		// Snapshot-to-live comparison
+		logger.Infof("Fetching current followers for comparison...")
+		comparisonLabel = "now"
+
+		var allFollowers []store.ActorProfile
+		cursor := ""
+		page := 0
+		for {
+			page++
+			response, err := service.GetFollowers(ctx, actor, 100, cursor)
+			if err != nil {
+				return fmt.Errorf("failed to fetch followers: %w", err)
+			}
+
+			allFollowers = append(allFollowers, response.Followers...)
+
+			if response.Cursor != "" {
+				logger.Infof("Fetched page %d (%d followers so far)...", page, len(allFollowers))
+			}
+
+			if response.Cursor == "" {
+				break
+			}
+			cursor = response.Cursor
+		}
+
+		logger.Infof("Fetched %d current followers", len(allFollowers))
+
+		for _, follower := range allFollowers {
+			comparisonDids = append(comparisonDids, follower.Did)
+		}
+	}
+
+	// Calculate diff
+	baselineSet := make(map[string]bool)
+	for _, did := range baselineDids {
+		baselineSet[did] = true
+	}
+
+	comparisonSet := make(map[string]bool)
+	for _, did := range comparisonDids {
+		comparisonSet[did] = true
+	}
+
+	// New followers: in comparison but not in baseline
+	var newFollowers []string
+	for _, did := range comparisonDids {
+		if !baselineSet[did] {
+			newFollowers = append(newFollowers, did)
+		}
+	}
+
+	// Unfollows: in baseline but not in comparison
+	var unfollows []string
+	for _, did := range baselineDids {
+		if !comparisonSet[did] {
+			unfollows = append(unfollows, did)
+		}
+	}
+
+	// Output results
+	switch outputFormat {
+	case "json":
+		return outputDiffJSON(newFollowers, unfollows)
+	case "csv":
+		return outputDiffCSV(newFollowers, unfollows)
+	default:
+		displayDiffTable(baselineSnapshot.CreatedAt().Format("2006-01-02 15:04"), comparisonLabel, len(baselineDids), len(comparisonDids), newFollowers, unfollows)
+	}
+
+	return nil
+}
+
+func displayDiffTable(baselineLabel, comparisonLabel string, baselineCount, comparisonCount int, newFollowers, unfollows []string) {
+	ui.Titleln("Follower Diff: %s → %s", baselineLabel, comparisonLabel)
+	fmt.Println()
+
+	fmt.Printf("Baseline:   %d followers\n", baselineCount)
+	fmt.Printf("Comparison: %d followers\n", comparisonCount)
+	fmt.Printf("Net change: %+d\n", comparisonCount-baselineCount)
+	fmt.Println()
+
+	if len(newFollowers) > 0 {
+		ui.Titleln("New Followers (%d)", len(newFollowers))
+		for _, did := range newFollowers {
+			fmt.Printf("  + %s\n", did)
+		}
+		fmt.Println()
+	}
+
+	if len(unfollows) > 0 {
+		ui.Titleln("Unfollows (%d)", len(unfollows))
+		for _, did := range unfollows {
+			fmt.Printf("  - %s\n", did)
+		}
+		fmt.Println()
+	}
+
+	if len(newFollowers) == 0 && len(unfollows) == 0 {
+		ui.Infoln("No changes detected")
+	}
+}
+
+type diffOutput struct {
+	NewFollowers []string `json:"newFollowers"`
+	Unfollows    []string `json:"unfollows"`
+	Summary      struct {
+		BaselineCount   int `json:"baselineCount"`
+		ComparisonCount int `json:"comparisonCount"`
+		NetChange       int `json:"netChange"`
+		NewCount        int `json:"newCount"`
+		UnfollowCount   int `json:"unfollowCount"`
+	} `json:"summary"`
+}
+
+func outputDiffJSON(newFollowers, unfollows []string) error {
+	output := diffOutput{
+		NewFollowers: newFollowers,
+		Unfollows:    unfollows,
+	}
+	if output.NewFollowers == nil {
+		output.NewFollowers = []string{}
+	}
+	if output.Unfollows == nil {
+		output.Unfollows = []string{}
+	}
+	output.Summary.NewCount = len(newFollowers)
+	output.Summary.UnfollowCount = len(unfollows)
+
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(output)
+}
+
+func outputDiffCSV(newFollowers, unfollows []string) error {
+	writer := csv.NewWriter(os.Stdout)
+	defer writer.Flush()
+
+	if err := writer.Write([]string{"type", "did"}); err != nil {
+		return err
+	}
+
+	for _, did := range newFollowers {
+		if err := writer.Write([]string{"new_follower", did}); err != nil {
+			return err
+		}
+	}
+
+	for _, did := range unfollows {
+		if err := writer.Write([]string{"unfollow", did}); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -483,6 +719,11 @@ func FollowersExportAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("not authenticated: run 'skycli login' first")
 	}
 
+	cacheRepo, err := reg.GetCacheRepo()
+	if err != nil {
+		return fmt.Errorf("failed to get cache repository: %w", err)
+	}
+
 	actor := cmd.String("user")
 	if actor == "" {
 		actor = service.GetDid()
@@ -491,6 +732,7 @@ func FollowersExportAction(ctx context.Context, cmd *cli.Command) error {
 	quietPosters := cmd.Bool("quiet")
 	quietThreshold := cmd.Float("threshold")
 	outputFormat := cmd.String("output")
+	refresh := cmd.Bool("refresh")
 
 	logger.Debugf("Exporting followers for actor %v with fmt %v", actor, outputFormat)
 
@@ -521,11 +763,11 @@ func FollowersExportAction(ctx context.Context, cmd *cli.Command) error {
 	followerInfos, actors := enrichFollowerProfiles(ctx, service, allFollowers, logger)
 
 	if inactiveDays > 0 {
-		followerInfos = filterInactive(ctx, service, followerInfos, actors, inactiveDays, logger)
+		followerInfos = filterInactive(ctx, service, cacheRepo, followerInfos, actors, inactiveDays, refresh, logger)
 	}
 
 	if quietPosters {
-		followerInfos = filterQuiet(ctx, service, followerInfos, actors, quietThreshold, logger)
+		followerInfos = filterQuiet(ctx, service, cacheRepo, followerInfos, actors, quietThreshold, refresh, logger)
 	}
 
 	switch outputFormat {
@@ -535,6 +777,33 @@ func FollowersExportAction(ctx context.Context, cmd *cli.Command) error {
 		return outputFollowersCSV(followerInfos, inactiveDays > 0 || quietPosters)
 	default:
 		return fmt.Errorf("output format must be 'json' or 'csv'")
+	}
+}
+
+// formatTimeSince formats a time duration into a human-readable string.
+//
+// Returns
+//   - "< 1 hour ago" for durations under 1 hour
+//   - "X hours ago" for under 24 hours
+//   - "X days ago" for longer durations.
+func formatTimeSince(since time.Time) string {
+	if since.IsZero() {
+		return "never"
+	}
+
+	duration := time.Since(since)
+	hours := duration.Hours()
+
+	if hours < 1 {
+		return "< 1 hour ago"
+	} else if hours < 24 {
+		return fmt.Sprintf("%d hours ago", int(hours))
+	} else {
+		days := int(hours / 24)
+		if days == 1 {
+			return "1 day ago"
+		}
+		return fmt.Sprintf("%d days ago", days)
 	}
 }
 
@@ -576,19 +845,11 @@ func displayFollowersTable(followers []followerInfo, showInactive bool) {
 
 		if showInactive && info.IsQuiet {
 			row = append(row, fmt.Sprintf("%.2f", info.PostsPerDay))
-			lastPostInfo := "never"
-			if info.DaysSincePost >= 0 {
-				lastPostInfo = fmt.Sprintf("%d days ago", info.DaysSincePost)
-			}
-			row = append(row, lastPostInfo)
+			row = append(row, formatTimeSince(info.LastPostDate))
 		} else if info.IsQuiet {
 			row = append(row, fmt.Sprintf("%.2f", info.PostsPerDay))
 		} else if showInactive {
-			lastPostInfo := "never"
-			if info.DaysSincePost >= 0 {
-				lastPostInfo = fmt.Sprintf("%d days ago", info.DaysSincePost)
-			}
-			row = append(row, lastPostInfo)
+			row = append(row, formatTimeSince(info.LastPostDate))
 		}
 
 		row = append(row, profileURL)
@@ -762,6 +1023,10 @@ func FollowersCommand() *cli.Command {
 						Usage:   "Output format: table, json, csv",
 						Value:   "table",
 					},
+					&cli.BoolFlag{
+						Name:  "refresh",
+						Usage: "Force refresh cached data (bypasses 24-hour cache)",
+					},
 				},
 				Action: ListFollowersAction,
 			},
@@ -795,18 +1060,28 @@ func FollowersCommand() *cli.Command {
 			{
 				Name:      "diff",
 				Usage:     "Compare follower lists between two dates",
-				UsageText: "Compare follower lists to identify new followers and unfollows. Requires snapshot storage (not yet implemented).",
+				UsageText: "Compare follower lists to identify new followers and unfollows. Without --until, compares snapshot to current live data.",
 				ArgsUsage: " ",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
+						Name:    "user",
+						Aliases: []string{"u"},
+						Usage:   "User handle or DID (defaults to authenticated user)",
+					},
+					&cli.StringFlag{
 						Name:     "since",
-						Usage:    "Start date (YYYY-MM-DD)",
+						Usage:    "Start date (YYYY-MM-DD) or snapshot ID",
 						Required: true,
 					},
 					&cli.StringFlag{
-						Name:     "until",
-						Usage:    "End date (YYYY-MM-DD)",
-						Required: true,
+						Name:  "until",
+						Usage: "End date (YYYY-MM-DD) or snapshot ID (omit to compare with live data)",
+					},
+					&cli.StringFlag{
+						Name:    "output",
+						Aliases: []string{"o"},
+						Usage:   "Output format: table, json, csv",
+						Value:   "table",
 					},
 				},
 				Action: FollowersDiffAction,
@@ -842,6 +1117,10 @@ func FollowersCommand() *cli.Command {
 						Usage:    "Output format: json, csv",
 						Value:    "csv",
 						Required: true,
+					},
+					&cli.BoolFlag{
+						Name:  "refresh",
+						Usage: "Force refresh cached data (bypasses 24-hour cache)",
 					},
 				},
 				Action: FollowersExportAction,
@@ -890,6 +1169,10 @@ func FollowingCommand() *cli.Command {
 						Aliases: []string{"o"},
 						Usage:   "Output format: table, json, csv",
 						Value:   "table",
+					},
+					&cli.BoolFlag{
+						Name:  "refresh",
+						Usage: "Force refresh cached data (bypasses 24-hour cache)",
 					},
 				},
 				Action: ListFollowingAction,

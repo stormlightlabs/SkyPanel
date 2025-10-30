@@ -7,8 +7,6 @@ import (
 	"github.com/stormlightlabs/skypanel/cli/internal/utils"
 )
 
-// TestRunMigrations verifies that migrations are applied correctly to a fresh database.
-// It checks that the schema_migrations table is created and all migrations are executed in order.
 func TestRunMigrations(t *testing.T) {
 	db, cleanup := utils.NewTestDB(t)
 	defer cleanup()
@@ -23,8 +21,8 @@ func TestRunMigrations(t *testing.T) {
 		t.Fatalf("schema_migrations table not found: %v", err)
 	}
 
-	if count != 3 {
-		t.Errorf("expected 3 migrations applied, got %d", count)
+	if count != 4 {
+		t.Errorf("expected 4 migrations applied, got %d", count)
 	}
 
 	err = db.QueryRow("SELECT COUNT(*) FROM feeds").Scan(&count)
@@ -43,8 +41,6 @@ func TestRunMigrations(t *testing.T) {
 	}
 }
 
-// TestRunMigrations_Idempotent verifies that running migrations multiple times
-// doesn't re-apply already executed migrations.
 func TestRunMigrations_Idempotent(t *testing.T) {
 	db, cleanup := utils.NewTestDB(t)
 	defer cleanup()
@@ -63,12 +59,11 @@ func TestRunMigrations_Idempotent(t *testing.T) {
 		t.Fatalf("failed to query migrations: %v", err)
 	}
 
-	if count != 3 {
-		t.Errorf("expected 3 migrations, got %d", count)
+	if count != 4 {
+		t.Errorf("expected 4 migrations, got %d", count)
 	}
 }
 
-// TestRollback verifies that down migrations correctly revert database changes.
 func TestRollback(t *testing.T) {
 	db, cleanup := utils.NewTestDB(t)
 	defer cleanup()
@@ -102,7 +97,6 @@ func TestRollback(t *testing.T) {
 	}
 }
 
-// TestRollback_Complete verifies that rolling back to version 0 removes all migrations.
 func TestRollback_Complete(t *testing.T) {
 	db, cleanup := utils.NewTestDB(t)
 	defer cleanup()
@@ -138,7 +132,6 @@ func TestRollback_Complete(t *testing.T) {
 	}
 }
 
-// TestMigrationOrdering verifies that migrations are applied in correct version order.
 func TestMigrationOrdering(t *testing.T) {
 	db, cleanup := utils.NewTestDB(t)
 	defer cleanup()
@@ -153,7 +146,7 @@ func TestMigrationOrdering(t *testing.T) {
 	}
 	defer rows.Close()
 
-	expectedVersions := []int{1, 2, 3}
+	expectedVersions := []int{1, 2, 3, 4}
 	var actualVersions []int
 
 	for rows.Next() {
@@ -175,7 +168,6 @@ func TestMigrationOrdering(t *testing.T) {
 	}
 }
 
-// TestGetAppliedMigrations verifies the helper function correctly retrieves applied migrations.
 func TestGetAppliedMigrations(t *testing.T) {
 	db, cleanup := utils.NewTestDB(t)
 	defer cleanup()
@@ -205,15 +197,14 @@ func TestGetAppliedMigrations(t *testing.T) {
 	}
 }
 
-// TestLoadMigrations verifies that migration files are correctly loaded from embedded FS.
 func TestLoadMigrations(t *testing.T) {
 	upMigrations, err := loadMigrations("up")
 	if err != nil {
 		t.Fatalf("failed to load up migrations: %v", err)
 	}
 
-	if len(upMigrations) != 3 {
-		t.Errorf("expected 3 up migrations, got %d", len(upMigrations))
+	if len(upMigrations) != 4 {
+		t.Errorf("expected 4 up migrations, got %d", len(upMigrations))
 	}
 
 	for i := 1; i < len(upMigrations); i++ {
@@ -227,12 +218,11 @@ func TestLoadMigrations(t *testing.T) {
 		t.Fatalf("failed to load down migrations: %v", err)
 	}
 
-	if len(downMigrations) != 3 {
-		t.Errorf("expected 3 down migrations, got %d", len(downMigrations))
+	if len(downMigrations) != 4 {
+		t.Errorf("expected 4 down migrations, got %d", len(downMigrations))
 	}
 }
 
-// TestExecuteMigration verifies that SQL is correctly executed.
 func TestExecuteMigration(t *testing.T) {
 	db, cleanup := utils.NewTestDB(t)
 	defer cleanup()
@@ -254,7 +244,6 @@ func TestExecuteMigration(t *testing.T) {
 	}
 }
 
-// TestRecordAndRemoveMigration verifies the migration tracking functions.
 func TestRecordAndRemoveMigration(t *testing.T) {
 	db, cleanup := utils.NewTestDB(t)
 	defer cleanup()
@@ -289,7 +278,6 @@ func TestRecordAndRemoveMigration(t *testing.T) {
 	}
 }
 
-// TestMigrationWithForeignKey verifies that foreign key constraints work correctly.
 func TestMigrationWithForeignKey(t *testing.T) {
 	db, cleanup := utils.NewTestDB(t)
 	defer cleanup()
@@ -327,7 +315,6 @@ func TestMigrationWithForeignKey(t *testing.T) {
 	}
 }
 
-// TestCreateMigrationsTable verifies the migrations tracking table is created correctly.
 func TestCreateMigrationsTable(t *testing.T) {
 	db, cleanup := utils.NewTestDB(t)
 	defer cleanup()
